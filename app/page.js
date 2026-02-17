@@ -200,7 +200,7 @@ function MissPanel({ onAdd }) {
     <div style={{ maxWidth: 560, margin: "16px auto 0", ...BOX, background: "rgba(224,107,143,0.06)", borderColor: "rgba(224,107,143,0.2)" }}>
       <div style={{ fontSize: 14, fontWeight: 700, color: "#E06B8F", marginBottom: 12 }}>Add a Landmark</div>
       <div style={{ fontSize: 13, color: "#8B7355", marginBottom: 12 }}>
-        Add something you&#39;re seeing on the road. It&#39;ll swap out a filler item on all cards.
+        Realize you missed something you know you&#39;ll see? Add it here and it&#39;ll show up on all the cards.
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
         <input style={{ ...IN, flex: 1, padding: "8px 12px" }} value={name} onChange={(e) => setName(e.target.value)} placeholder="What will you see?" onKeyDown={(e) => e.key === "Enter" && submit()} />
@@ -245,7 +245,7 @@ export default function App() {
   const [routeError, setRouteError] = useState(null);
   const [genError, setGenError] = useState(null);
 
-  const freeItem = { name: "Pit Stop", emoji: "🚻", desc: "", category: "free", tier: "free" };
+  const freeItem = { name: "First Pit Stop", emoji: "🚻", desc: "", category: "free", tier: "free" };
 
   useEffect(() => {
     const s = localStorage.getItem("rtb_last_session");
@@ -400,9 +400,9 @@ export default function App() {
                 {gensLeft} free generation{gensLeft !== 1 ? "s" : ""} remaining
               </div>
             </div>
-            <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><input style={IN} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="e.g. Paris, France" /></div>
+            <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><input style={IN} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Chicago, IL" /></div>
             <div style={{ textAlign: "center", margin: "4px 0", color: "#6B5C48", fontSize: 20 }}>↓</div>
-            <div style={{ marginBottom: 28 }}><label style={L}>Destination</label><input style={IN} value={to} onChange={(e) => setTo(e.target.value)} placeholder="e.g. Berlin, Germany" /></div>
+            <div style={{ marginBottom: 28 }}><label style={L}>Destination</label><input style={IN} value={to} onChange={(e) => setTo(e.target.value)} placeholder="Santa Monica, CA" /></div>
             <div style={{ marginBottom: 32 }}>
               <label style={L}>How many cards?</label>
               <input type="text" inputMode="numeric" style={IN}
@@ -443,7 +443,7 @@ export default function App() {
             <div style={{ marginBottom: 20 }}>
               <label style={L}>Add Waypoints (optional)</label>
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input style={{ ...IN, flex: 1, padding: "10px 14px" }} value={wpInput} onChange={(e) => setWpInput(e.target.value)} placeholder="your favorite pitstop"
+                <input style={{ ...IN, flex: 1, padding: "10px 14px" }} value={wpInput} onChange={(e) => setWpInput(e.target.value)} placeholder="... Add your favorite detour"
                   onKeyDown={(e) => { if (e.key === "Enter" && wpInput.trim()) { setWaypoints((p) => [...p, wpInput.trim()]); setWpInput(""); } }} />
                 <button onClick={() => { if (wpInput.trim()) { setWaypoints((p) => [...p, wpInput.trim()]); setWpInput(""); } }} disabled={!wpInput.trim()} style={{ ...B2, padding: "10px 18px", opacity: wpInput.trim() ? 1 : 0.4, color: wpInput.trim() ? "#C4982A" : "#6B5C48" }}>Add</button>
               </div>
@@ -545,22 +545,13 @@ export default function App() {
         {/* ─── CARDS ─── */}
         {phase === "cards" && (
           <div style={{ padding: 24 }}>
+            {/* Top bar: back button only */}
             <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 560, margin: "0 auto 16px", width: "100%" }}>
               <button onClick={reset} style={B2}>← New Route</button>
-              <div style={{ display: "flex", gap: 8 }}>
-                <button onClick={handlePrint} style={{ ...B2, background: "rgba(196,152,42,0.08)", borderColor: "rgba(196,152,42,0.2)", color: "#C4982A" }}>🖨️ Print All</button>
-              </div>
             </div>
             <div className="no-print" style={{ textAlign: "center", fontSize: 12, color: "#6B5C48", marginBottom: 12 }}>{from} → {to} via {routeData?.route_name}</div>
 
-            {cards.length > 1 && (
-              <div className="no-print" style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-                {cards.map((_, i) => (
-                  <button key={i} onClick={() => setActiveCard(i)} style={{ padding: "6px 16px", borderRadius: 100, border: `1px solid ${activeCard === i ? "#C4982A" : "rgba(255,255,255,0.12)"}`, background: activeCard === i ? "linear-gradient(135deg,#8B6914,#C4982A)" : "rgba(255,255,255,0.04)", color: activeCard === i ? "#FFF" : "#6B5C48", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Card {i + 1}</button>
-                ))}
-              </div>
-            )}
-
+            {/* Blurb */}
             {blurb?.blurbs?.length > 0 && (
               <div className="no-print" style={{ maxWidth: 560, margin: "0 auto 16px" }}>
                 {blurb.blurbs.map((b, i) => (
@@ -572,12 +563,25 @@ export default function App() {
               </div>
             )}
 
+            {/* Card tabs + Print button */}
+            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 560, margin: "0 auto 16px", width: "100%", flexWrap: "wrap", gap: 8 }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                {cards.map((_, i) => (
+                  <button key={i} onClick={() => setActiveCard(i)} style={{ padding: "6px 16px", borderRadius: 100, border: `1px solid ${activeCard === i ? "#C4982A" : "rgba(255,255,255,0.12)"}`, background: activeCard === i ? "linear-gradient(135deg,#8B6914,#C4982A)" : "rgba(255,255,255,0.04)", color: activeCard === i ? "#FFF" : "#6B5C48", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Card {i + 1}</button>
+                ))}
+              </div>
+              <button onClick={handlePrint} style={{ ...B2, background: "rgba(196,152,42,0.08)", borderColor: "rgba(196,152,42,0.2)", color: "#C4982A", whiteSpace: "nowrap" }}>🖨️ Print All</button>
+            </div>
+
+            {/* Active bingo card */}
             <div className="screen-only" style={{ display: "flex", justifyContent: "center", width: "100%", boxSizing: "border-box" }}>
               <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
             </div>
 
+            {/* Add a Landmark */}
             <div className="no-print"><MissPanel onAdd={handleMissAdd} /></div>
 
+            {/* Print output */}
             <div className="print-only">
               {blurb?.blurbs?.length > 0 && (
                 <div className="print-page" style={{ padding: "0.5in" }}>
@@ -593,25 +597,58 @@ export default function App() {
               )}
               {cards.map((card, ci) => (
                 <div key={ci} className="print-page">
-                  <div className="print-header">
-                    <h2>{from.split(",")[0].trim()} to {to.split(",")[0].trim()} Highway Bingo!</h2>
-                  </div>
-                  <div className="print-card" style={{ borderRadius: 12, padding: 16, border: "2px solid #333" }}>
-                    <div style={{ display: "grid", gridTemplateColumns: `repeat(${gridSize},1fr)`, gap: 4 }}>
-                      {card.map((item, i) => {
-                        const isFree = gridSize % 2 === 1 && i === Math.floor((gridSize * gridSize) / 2);
-                        return (
-                          <div key={i} style={{
-                            aspectRatio: "1", border: "1.5px solid #ccc", borderRadius: 6,
-                            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                            padding: 6, background: isFree ? "#f0e6c8" : "white", textAlign: "center",
-                          }}>
-                            <div style={{ fontSize: 9, fontWeight: 600, color: "#222", lineHeight: 1.15 }}>
-                              {isFree ? `${item.name} (FREE)` : item.name}
+                  {/* Vintage banner + grid wrapped in single border */}
+                  <div style={{ border: "3px solid #111", borderRadius: 10, overflow: "hidden", width: "100%", background: "white" }}>
+                    {/* Banner */}
+                    <div style={{ position: "relative", padding: "14px 20px", borderBottom: "2px solid #111", background: "white", display: "flex", alignItems: "center", gap: 16 }}>
+                      {/* Inner decorative inset border */}
+                      <div style={{ position: "absolute", inset: 5, border: "1px solid #bbb", borderRadius: 5, pointerEvents: "none" }} />
+                      {/* Car icon */}
+                      <svg width="52" height="30" viewBox="0 0 52 30" fill="none" stroke="#111" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                        <path strokeWidth="1.5" d="M2 22 L7 13 Q9 9 13 9 L30 9 Q34 9 36 13 L41 22 Z"/>
+                        <path strokeWidth="1" d="M13 9 L11 18 M30 9 L32 18"/>
+                        <line strokeWidth="1" x1="11" y1="18" x2="32" y2="18"/>
+                        <line strokeWidth="1" x1="21" y1="9" x2="21" y2="18"/>
+                        <circle strokeWidth="1.5" cx="11" cy="26" r="4"/>
+                        <circle strokeWidth="1.5" cx="32" cy="26" r="4"/>
+                        <circle cx="11" cy="26" r="1.5" fill="#111"/>
+                        <circle cx="32" cy="26" r="1.5" fill="#111"/>
+                      </svg>
+                      {/* Title */}
+                      <div style={{ flex: 1, textAlign: "center", fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, fontWeight: 800, color: "#111", lineHeight: 1.25 }}>
+                        {from.split(",")[0].trim()} to {to.split(",")[0].trim()} Highway Bingo!
+                      </div>
+                      {/* Road icon */}
+                      <svg width="52" height="30" viewBox="0 0 52 30" fill="none" stroke="#111" strokeLinecap="round" style={{ flexShrink: 0 }}>
+                        <line x1="2" y1="13" x2="50" y2="13" strokeWidth="0.75"/>
+                        <path strokeWidth="1.5" d="M2 30 L26 13 L50 30"/>
+                        <line x1="26" y1="15" x2="26" y2="18" strokeWidth="1"/>
+                        <line x1="25" y1="21" x2="27" y2="21" strokeWidth="1"/>
+                        <line x1="23" y1="25" x2="29" y2="25" strokeWidth="1"/>
+                        <circle cx="26" cy="8" r="4" strokeWidth="1" fill="none"/>
+                        <line x1="26" y1="4" x2="26" y2="2" strokeWidth="0.75"/>
+                        <line x1="30" y1="8" x2="32" y2="8" strokeWidth="0.75"/>
+                        <line x1="22" y1="8" x2="20" y2="8" strokeWidth="0.75"/>
+                      </svg>
+                    </div>
+                    {/* Bingo grid */}
+                    <div style={{ padding: 12, background: "white" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${gridSize},1fr)`, gap: 4 }}>
+                        {card.map((item, i) => {
+                          const isFree = gridSize % 2 === 1 && i === Math.floor((gridSize * gridSize) / 2);
+                          return (
+                            <div key={i} style={{
+                              aspectRatio: "1", border: `1.5px solid ${isFree ? "#888" : "#ccc"}`, borderRadius: 5,
+                              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                              padding: 5, background: isFree ? "#f5ead0" : "white", textAlign: "center",
+                            }}>
+                              <div style={{ fontSize: 9, fontWeight: isFree ? 700 : 600, color: "#111", lineHeight: 1.2 }}>
+                                {isFree ? `${item.name} ★` : item.name}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 </div>
