@@ -26,6 +26,15 @@ const BOX = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,
 // UTILITIES
 // ═══════════════════════════════════════════════════════════════
 
+function toTitleCase(s) {
+  return s.split(" ").map((w) => {
+    const bare = w.replace(/[^a-zA-Z]/g, "");
+    return bare.length <= 2 && bare.length > 0
+      ? w.toUpperCase()
+      : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  }).join(" ");
+}
+
 function shuffle(a) {
   const b = [...a];
   for (let i = b.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [b[i], b[j]] = [b[j], b[i]]; }
@@ -545,23 +554,18 @@ export default function App() {
         {/* ─── CARDS ─── */}
         {phase === "cards" && (
           <div style={{ padding: 24 }}>
-            {/* Top bar: back button only */}
-            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 560, margin: "0 auto 16px", width: "100%" }}>
-              <button onClick={reset} style={B2}>← New Route</button>
-            </div>
-            <div className="no-print" style={{ textAlign: "center", fontSize: 12, color: "#6B5C48", marginBottom: 12 }}>{from} → {to} via {routeData?.route_name}</div>
-
-            {/* Blurb */}
-            {blurb?.blurbs?.length > 0 && (
-              <div className="no-print" style={{ maxWidth: 560, margin: "0 auto 16px" }}>
-                {blurb.blurbs.map((b, i) => (
-                  <div key={i} style={{ ...BOX, marginBottom: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#C4982A", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{b.leg}</div>
-                    <div style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.6 }}>{b.description}</div>
-                  </div>
-                ))}
+            {/* Large route banner */}
+            <div className="no-print" style={{ textAlign: "center", maxWidth: 560, margin: "0 auto 20px", width: "100%" }}>
+              <div style={{ fontFamily: SF, fontSize: "clamp(24px,5vw,36px)", fontWeight: 900, lineHeight: 1.2, paddingBottom: "0.1em", background: "linear-gradient(180deg,#FFF9EE,#D4C5A9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", display: "inline-block" }}>
+                {from.split(",")[0].trim()} to {to.split(",")[0].trim()}
               </div>
-            )}
+              <div style={{ fontSize: 15, color: "#C4982A", fontWeight: 600, marginTop: 4 }}>Route Summary</div>
+            </div>
+
+            {/* Active bingo card */}
+            <div className="screen-only" style={{ display: "flex", justifyContent: "center", width: "100%", boxSizing: "border-box", marginBottom: 16 }}>
+              <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
+            </div>
 
             {/* Card tabs + Print button */}
             <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 560, margin: "0 auto 16px", width: "100%", flexWrap: "wrap", gap: 8 }}>
@@ -573,13 +577,25 @@ export default function App() {
               <button onClick={handlePrint} style={{ ...B2, background: "rgba(196,152,42,0.08)", borderColor: "rgba(196,152,42,0.2)", color: "#C4982A", whiteSpace: "nowrap" }}>🖨️ Print All</button>
             </div>
 
-            {/* Active bingo card */}
-            <div className="screen-only" style={{ display: "flex", justifyContent: "center", width: "100%", boxSizing: "border-box" }}>
-              <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
-            </div>
-
             {/* Add a Landmark */}
             <div className="no-print"><MissPanel onAdd={handleMissAdd} /></div>
+
+            {/* Blurb */}
+            {blurb?.blurbs?.length > 0 && (
+              <div className="no-print" style={{ maxWidth: 560, margin: "16px auto 0" }}>
+                {blurb.blurbs.map((b, i) => (
+                  <div key={i} style={{ ...BOX, marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#C4982A", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{b.leg}</div>
+                    <div style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.6 }}>{b.description}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* New Route button at bottom */}
+            <div className="no-print" style={{ maxWidth: 560, margin: "24px auto 0", width: "100%" }}>
+              <button onClick={reset} style={B2}>← New Route</button>
+            </div>
 
             {/* Print output */}
             <div className="print-only">
@@ -597,38 +613,27 @@ export default function App() {
               )}
               {cards.map((card, ci) => (
                 <div key={ci} className="print-page">
-                  {/* Vintage banner + grid wrapped in single border */}
                   <div style={{ border: "3px solid #111", borderRadius: 10, overflow: "hidden", width: "100%", background: "white" }}>
                     {/* Banner */}
                     <div style={{ position: "relative", padding: "14px 20px", borderBottom: "2px solid #111", background: "white", display: "flex", alignItems: "center", gap: 16 }}>
-                      {/* Inner decorative inset border */}
                       <div style={{ position: "absolute", inset: 5, border: "1px solid #bbb", borderRadius: 5, pointerEvents: "none" }} />
-                      {/* Car icon */}
-                      <svg width="52" height="30" viewBox="0 0 52 30" fill="none" stroke="#111" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                        <path strokeWidth="1.5" d="M2 22 L7 13 Q9 9 13 9 L30 9 Q34 9 36 13 L41 22 Z"/>
-                        <path strokeWidth="1" d="M13 9 L11 18 M30 9 L32 18"/>
-                        <line strokeWidth="1" x1="11" y1="18" x2="32" y2="18"/>
-                        <line strokeWidth="1" x1="21" y1="9" x2="21" y2="18"/>
-                        <circle strokeWidth="1.5" cx="11" cy="26" r="4"/>
-                        <circle strokeWidth="1.5" cx="32" cy="26" r="4"/>
-                        <circle cx="11" cy="26" r="1.5" fill="#111"/>
-                        <circle cx="32" cy="26" r="1.5" fill="#111"/>
+                      {/* Highway shield left */}
+                      <svg width="44" height="52" viewBox="0 0 44 52" fill="none" style={{ flexShrink: 0 }}>
+                        <path d="M2 2 H42 V32 L22 50 L2 32 Z" fill="#111"/>
+                        <path d="M5 5 H39 V31 L22 46 L5 31 Z" fill="none" stroke="white" strokeWidth="1.5"/>
+                        <text x="22" y="20" textAnchor="middle" fill="white" fontSize="6" fontWeight="800" fontFamily="Arial,sans-serif" letterSpacing="1">HIGHWAY</text>
+                        <text x="22" y="36" textAnchor="middle" fill="white" fontSize="13" fontFamily="Arial,sans-serif">★</text>
                       </svg>
                       {/* Title */}
                       <div style={{ flex: 1, textAlign: "center", fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, fontWeight: 800, color: "#111", lineHeight: 1.25 }}>
-                        {from.split(",")[0].trim()} to {to.split(",")[0].trim()} Highway Bingo!
+                        {toTitleCase(from)} to {toTitleCase(to)} Highway Bingo!
                       </div>
-                      {/* Road icon */}
-                      <svg width="52" height="30" viewBox="0 0 52 30" fill="none" stroke="#111" strokeLinecap="round" style={{ flexShrink: 0 }}>
-                        <line x1="2" y1="13" x2="50" y2="13" strokeWidth="0.75"/>
-                        <path strokeWidth="1.5" d="M2 30 L26 13 L50 30"/>
-                        <line x1="26" y1="15" x2="26" y2="18" strokeWidth="1"/>
-                        <line x1="25" y1="21" x2="27" y2="21" strokeWidth="1"/>
-                        <line x1="23" y1="25" x2="29" y2="25" strokeWidth="1"/>
-                        <circle cx="26" cy="8" r="4" strokeWidth="1" fill="none"/>
-                        <line x1="26" y1="4" x2="26" y2="2" strokeWidth="0.75"/>
-                        <line x1="30" y1="8" x2="32" y2="8" strokeWidth="0.75"/>
-                        <line x1="22" y1="8" x2="20" y2="8" strokeWidth="0.75"/>
+                      {/* Highway shield right */}
+                      <svg width="44" height="52" viewBox="0 0 44 52" fill="none" style={{ flexShrink: 0 }}>
+                        <path d="M2 2 H42 V32 L22 50 L2 32 Z" fill="#111"/>
+                        <path d="M5 5 H39 V31 L22 46 L5 31 Z" fill="none" stroke="white" strokeWidth="1.5"/>
+                        <text x="22" y="20" textAnchor="middle" fill="white" fontSize="6" fontWeight="800" fontFamily="Arial,sans-serif" letterSpacing="1">HIGHWAY</text>
+                        <text x="22" y="36" textAnchor="middle" fill="white" fontSize="13" fontFamily="Arial,sans-serif">★</text>
                       </svg>
                     </div>
                     {/* Bingo grid */}
