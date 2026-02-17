@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
 /*
   ROAD TRIP BINGO — Claude-Powered
@@ -52,6 +52,7 @@ function buildCard(pool, guaranteed, sz, freeItem) {
 // ═══════════════════════════════════════════════════════════════
 
 const PRINT_CSS = `
+@page { margin: 0.3in; }
 @media print {
   body, html { background: white !important; margin: 0; padding: 0; }
   .no-print { display: none !important; }
@@ -77,13 +78,7 @@ const PRINT_CSS = `
   .print-card .free-cell {
     background: #f0e6c8 !important;
   }
-  .print-header {
-    text-align: center;
-    margin-bottom: 16px;
-    font-family: 'Playfair Display', Georgia, serif;
-  }
-  .print-header h2 { font-size: 28px; margin: 0; color: #333; }
-  .print-header p { font-size: 12px; color: #888; margin: 4px 0 0; }
+  .print-header { display: none !important; }
   .screen-only { display: none !important; }
 }
 @media screen {
@@ -96,7 +91,6 @@ const PRINT_CSS = `
 // ═══════════════════════════════════════════════════════════════
 
 function Cell({ item, size, free, marked, onClick }) {
-  const es = size <= 3 ? 28 : size <= 4 ? 22 : 18;
   const ns = size <= 3 ? 14 : size <= 4 ? 12 : 10;
 
   return (
@@ -111,15 +105,11 @@ function Cell({ item, size, free, marked, onClick }) {
     }}>
       {free ? (
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: size <= 3 ? 20 : 16, marginBottom: 2 }}>{item?.emoji || "📍"}</div>
           <div style={{ fontFamily: BF, fontWeight: 700, fontSize: size <= 3 ? 12 : 10, color: "#FFF", textTransform: "uppercase", lineHeight: 1.1 }}>{item?.name}</div>
-          <div style={{ fontSize: 8, color: "rgba(255,255,255,0.7)", marginTop: 2, textTransform: "uppercase", letterSpacing: 1 }}>START</div>
+          <div style={{ fontSize: 8, color: "rgba(255,255,255,0.7)", marginTop: 2, textTransform: "uppercase", letterSpacing: 1 }}>FREE</div>
         </div>
       ) : (
-        <>
-          <div style={{ fontSize: es, lineHeight: 1, marginBottom: 2 }}>{marked ? "✓" : item?.emoji}</div>
-          <div style={{ fontFamily: BF, fontWeight: 600, fontSize: ns, color: marked ? "#c8e6a0" : "#3D2E1C", textAlign: "center", lineHeight: 1.15, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: size >= 5 ? 2 : 3, WebkitBoxOrient: "vertical" }}>{item?.name}</div>
-        </>
+        <div style={{ fontFamily: BF, fontWeight: 600, fontSize: ns, color: marked ? "#c8e6a0" : "#3D2E1C", textAlign: "center", lineHeight: 1.15, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: size >= 5 ? 2 : 3, WebkitBoxOrient: "vertical" }}>{item?.name}</div>
       )}
       {/* Tooltip (screen only) */}
       {!free && item?.desc && (
@@ -172,7 +162,7 @@ function BingoCard({ card, size, idx, total }) {
       background: "linear-gradient(180deg,#FFF9EE,#F5ECD8)", borderRadius: 16, padding: 20,
       border: bingo ? "3px solid #6ab02e" : "2px solid #D4C5A9",
       boxShadow: bingo ? "0 0 30px rgba(106,176,46,0.3)" : "0 4px 20px rgba(0,0,0,0.08)",
-      maxWidth: size <= 3 ? 400 : size <= 4 ? 500 : 560, width: "100%",
+      maxWidth: "min(560px, 100%)", width: "100%",
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 12 }}>
         <div style={{ fontFamily: SF, fontSize: 13, fontWeight: 700, color: "#8B7355", textTransform: "uppercase", letterSpacing: 2 }}>Card {idx + 1}/{total}</div>
@@ -184,10 +174,10 @@ function BingoCard({ card, size, idx, total }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// MISS ANYTHING PANEL
+// ADD A LANDMARK PANEL
 // ═══════════════════════════════════════════════════════════════
 
-function MissPanel({ onAdd, onClose }) {
+function MissPanel({ onAdd }) {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
   const [emoji, setEmoji] = useState("");
@@ -200,10 +190,7 @@ function MissPanel({ onAdd, onClose }) {
 
   return (
     <div style={{ maxWidth: 560, margin: "16px auto 0", ...BOX, background: "rgba(224,107,143,0.06)", borderColor: "rgba(224,107,143,0.2)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#E06B8F" }}>🔍 Miss anything?</div>
-        <button onClick={onClose} style={{ background: "none", border: "none", color: "#6B5C48", cursor: "pointer", fontSize: 18 }}>✕</button>
-      </div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#E06B8F", marginBottom: 12 }}>Add a Landmark</div>
       <div style={{ fontSize: 13, color: "#8B7355", marginBottom: 12 }}>
         Add something you&#39;re seeing on the road. It&#39;ll swap out a filler item on all cards.
       </div>
@@ -227,7 +214,7 @@ export default function App() {
   const [phase, setPhase] = useState("setup");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [gridSize, setGridSize] = useState(4);
+  const gridSize = 5;
   const [numCards, setNumCards] = useState(4);
   const [gensLeft, setGensLeft] = useState(3);
   const [routeData, setRouteData] = useState(null);
@@ -245,12 +232,22 @@ export default function App() {
   const [activeCard, setActiveCard] = useState(0);
   const [progress, setProgress] = useState(0);
   const [loadMsg, setLoadMsg] = useState("");
-  const [showMiss, setShowMiss] = useState(false);
   const progRef = useRef(null);
 
-  const freeItem = { name: from.split(",")[0].trim(), emoji: "📍", desc: "", category: "free", tier: "free" };
+  const [blurb, setBlurb] = useState(null);
+  const [returnBanner, setReturnBanner] = useState(null);
+  const [routeError, setRouteError] = useState(null);
+  const [genError, setGenError] = useState(null);
+
+  const freeItem = { name: "First Bathroom Stop", emoji: "🚻", desc: "", category: "free", tier: "free" };
+
+  useEffect(() => {
+    const s = localStorage.getItem("rtb_last_session");
+    if (s) setReturnBanner(JSON.parse(s));
+  }, []);
 
   const planRoute = async () => {
+    setRouteError(null);
     setPhase("loading");
     try {
       const res = await fetch("/api/analyze-route", {
@@ -263,7 +260,7 @@ export default function App() {
       setRouteData(data);
       setPhase("route");
     } catch (err) {
-      alert("Failed to analyze route: " + err.message);
+      setRouteError(err.message);
       setPhase("setup");
     }
   };
@@ -276,6 +273,7 @@ export default function App() {
 
   const generate = async () => {
     if (gensLeft <= 0) return;
+    setGenError(null);
     setPhase("generating"); setProgress(0);
     const msgs = ["Checking community database...", "Scanning route corridor...", "Identifying landmarks...", "Balancing categories...", "Creating unique cards...", "Finalizing..."];
     let mi = 0; setLoadMsg(msgs[0]);
@@ -304,6 +302,22 @@ export default function App() {
       clearInterval(progRef.current); setProgress(100); setLoadMsg("Done!");
       const pool = [...customItems, ...(data.items || [])];
       setAllItems(pool);
+
+      localStorage.setItem("rtb_last_session", JSON.stringify({
+        from, to, routeId: data._routeId, items: pool,
+      }));
+
+      fetch("/api/generate-blurb", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          route_name: routeData?.route_name,
+          route_summary: routeData?.route_summary,
+          major_waypoints: routeData?.major_waypoints,
+          from, to,
+        }),
+      }).then((r) => r.json()).then((d) => setBlurb(d)).catch(() => {});
+
       const guaranteed = pool.filter((i) => i.tier === "custom" || i.tier === "legendary" || i.tier === "community_verified");
       const built = [];
       for (let i = 0; i < numCards; i++) built.push(buildCard(pool, guaranteed, gridSize, freeItem));
@@ -311,7 +325,7 @@ export default function App() {
       setTimeout(() => setPhase("cards"), 300);
     } catch (err) {
       clearInterval(progRef.current);
-      alert("Failed to generate items: " + err.message);
+      setGenError(err.message);
       setPhase("custom");
     }
   };
@@ -328,14 +342,13 @@ export default function App() {
       newCard[replaceIdx] = newItem;
       return newCard;
     }));
-    setShowMiss(false);
   };
 
   const handlePrint = () => window.print();
 
   const reset = () => {
     setPhase("setup"); setCards([]); setAllItems([]); setCustomItems([]);
-    setActiveCard(0); setWaypoints([]); setShowMiss(false); setRouteData(null);
+    setActiveCard(0); setWaypoints([]); setRouteData(null); setBlurb(null);
   };
 
   const [fb, setFb] = useState({});
@@ -358,7 +371,16 @@ export default function App() {
 
         {/* ─── SETUP ─── */}
         {phase === "setup" && (
-          <div className="no-print" style={{ maxWidth: 480, margin: "0 auto", padding: "32px 24px" }}>
+          <div className="no-print" style={{ maxWidth: 480, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
+            {returnBanner && (
+              <div style={{ marginBottom: 20, padding: 16, background: "rgba(196,152,42,0.08)", border: "1px solid rgba(196,152,42,0.2)", borderRadius: 12 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: "#C4982A", marginBottom: 8 }}>Welcome back! How was your {returnBanner.from} → {returnBanner.to} trip?</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => { setAllItems(returnBanner.items); setFrom(returnBanner.from); setTo(returnBanner.to); setFb({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Leave Feedback</button>
+                  <button onClick={() => { localStorage.removeItem("rtb_last_session"); setReturnBanner(null); }} style={B2}>Dismiss</button>
+                </div>
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
               <div style={{ background: "rgba(196,152,42,0.1)", border: "1px solid rgba(196,152,42,0.3)", borderRadius: 100, padding: "8px 20px", fontSize: 13, fontWeight: 600, color: "#C4982A" }}>
                 {gensLeft} free generation{gensLeft !== 1 ? "s" : ""} remaining
@@ -367,26 +389,18 @@ export default function App() {
             <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><input style={IN} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="e.g. Paris, France" /></div>
             <div style={{ textAlign: "center", margin: "4px 0", color: "#6B5C48", fontSize: 20 }}>↓</div>
             <div style={{ marginBottom: 28 }}><label style={L}>Destination</label><input style={IN} value={to} onChange={(e) => setTo(e.target.value)} placeholder="e.g. Berlin, Germany" /></div>
-            <div style={{ marginBottom: 24 }}>
-              <label style={L}>Grid Size</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                {[3, 4, 5].map((sz) => (
-                  <button key={sz} onClick={() => setGridSize(sz)} style={{ flex: 1, padding: 12, background: gridSize === sz ? "linear-gradient(135deg,#8B6914,#C4982A)" : "rgba(255,255,255,0.06)", border: `1px solid ${gridSize === sz ? "#C4982A" : "rgba(255,255,255,0.12)"}`, borderRadius: 10, color: gridSize === sz ? "#FFF" : "#A89270", cursor: "pointer", fontWeight: 700 }}>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>{sz}×{sz}</div>
-                    <div style={{ fontSize: 11, marginTop: 2, opacity: 0.8 }}>{sz === 3 ? "Quick" : sz === 4 ? "Standard" : "Classic"}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
             <div style={{ marginBottom: 32 }}>
-              <label style={L}>Number of Cards</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-                <button onClick={() => setNumCards(Math.max(1, numCards - 1))} style={{ width: 44, height: 44, ...B2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>−</button>
-                <div style={{ flex: 1, textAlign: "center", fontFamily: SF, fontSize: 32, fontWeight: 700 }}>{numCards}</div>
-                <button onClick={() => setNumCards(Math.min(8, numCards + 1))} style={{ width: 44, height: 44, ...B2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20 }}>+</button>
-              </div>
+              <label style={L}>How many cards?</label>
+              <input type="number" min={1} max={20} style={IN}
+                value={numCards} onChange={(e) => setNumCards(Math.max(1, parseInt(e.target.value) || 1))} />
             </div>
             <button onClick={planRoute} disabled={!from.trim() || !to.trim()} style={B1(!from.trim() || !to.trim())}>Plan My Route</button>
+            {routeError && (
+              <div style={{ marginTop: 16, padding: 16, background: "rgba(224,107,143,0.08)", border: "1px solid rgba(224,107,143,0.2)", borderRadius: 10, color: "#E06B8F", fontSize: 14 }}>
+                Could not analyze this route. Check your city names and try again.
+                <button onClick={planRoute} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
+              </div>
+            )}
             <div style={{ marginTop: 24, padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#C4982A", marginBottom: 4 }}>💡 Pro tip</div>
               <div style={{ fontSize: 13, color: "#8B7355", lineHeight: 1.5 }}>Whoever gets BINGO first earns a head start on tonight&#39;s board game, first pick of hotel beds, or choice of restaurant!</div>
@@ -406,7 +420,7 @@ export default function App() {
 
         {/* ─── ROUTE CONFIRM ─── */}
         {phase === "route" && (
-          <div className="no-print" style={{ maxWidth: 520, margin: "0 auto", padding: "32px 24px" }}>
+          <div className="no-print" style={{ maxWidth: 520, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "#C4982A", marginBottom: 8 }}>Confirm Your Route</div>
               <div style={{ fontFamily: SF, fontSize: 24, fontWeight: 700 }}>{from} → {to}</div>
@@ -457,7 +471,7 @@ export default function App() {
 
         {/* ─── CUSTOM ITEMS ─── */}
         {phase === "custom" && (
-          <div className="no-print" style={{ maxWidth: 520, margin: "0 auto", padding: "32px 24px" }}>
+          <div className="no-print" style={{ maxWidth: 520, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "#C4982A", marginBottom: 8 }}>Optional</div>
               <div style={{ fontFamily: SF, fontSize: 22, fontWeight: 700, marginBottom: 8 }}>Add Your Own Items</div>
@@ -484,6 +498,12 @@ export default function App() {
                 <button onClick={addCustom} disabled={!ciName.trim()} style={{ ...B2, padding: "8px 18px", opacity: ciName.trim() ? 1 : 0.4, color: ciName.trim() ? "#C4982A" : "#6B5C48" }}>Add</button>
               </div>
             </div>
+            {genError && (
+              <div style={{ marginBottom: 16, padding: 16, background: "rgba(224,107,143,0.08)", border: "1px solid rgba(224,107,143,0.2)", borderRadius: 10, color: "#E06B8F", fontSize: 14 }}>
+                Could not generate cards. Please try again.
+                <button onClick={generate} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
+              </div>
+            )}
             <button onClick={generate} style={B1(false)}>Generate {numCards} Card{numCards !== 1 ? "s" : ""} 🎲</button>
             <div style={{ textAlign: "center", marginTop: 12 }}>
               <button onClick={() => setPhase("route")} style={{ background: "none", border: "none", color: "#6B5C48", cursor: "pointer", fontSize: 13 }}>← Back to route</button>
@@ -513,7 +533,7 @@ export default function App() {
         {/* ─── CARDS ─── */}
         {phase === "cards" && (
           <div style={{ padding: 24 }}>
-            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 560, margin: "0 auto 16px" }}>
+            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 560, margin: "0 auto 16px", width: "100%" }}>
               <button onClick={reset} style={B2}>← New Route</button>
               <div style={{ display: "flex", gap: 8 }}>
                 <button onClick={handlePrint} style={{ ...B2, background: "rgba(196,152,42,0.08)", borderColor: "rgba(196,152,42,0.2)", color: "#C4982A" }}>🖨️ Print All</button>
@@ -529,7 +549,9 @@ export default function App() {
               </div>
             )}
 
-            <div className="screen-only" style={{ display: "flex", justifyContent: "center" }}>
+            <div className="no-print"><MissPanel onAdd={handleMissAdd} /></div>
+
+            <div className="screen-only" style={{ display: "flex", justifyContent: "center", width: "100%", boxSizing: "border-box", marginTop: 16 }}>
               <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
             </div>
 
@@ -537,13 +559,20 @@ export default function App() {
               {allItems.length} items in pool • Hover cells for details
             </div>
 
-            <div className="no-print" style={{ maxWidth: 460, margin: "16px auto 0", display: "flex", gap: 8 }}>
-              <div style={{ flex: 1, padding: "12px 16px", background: "rgba(196,152,42,0.08)", border: "1px solid rgba(196,152,42,0.15)", borderRadius: 10, textAlign: "center", fontSize: 13, color: "#C4982A", fontStyle: "italic" }}>🏆 Announce the prize first!</div>
-              <button onClick={() => setShowMiss(!showMiss)} style={{ ...B2, padding: "12px 14px", fontSize: 12, background: "rgba(224,107,143,0.08)", borderColor: "rgba(224,107,143,0.2)", color: "#E06B8F" }}>🔍 Miss?</button>
+            <div className="no-print" style={{ maxWidth: 460, margin: "16px auto 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button onClick={() => { setFb({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, padding: "12px 14px", fontSize: 12, background: "rgba(255,107,53,0.08)", borderColor: "rgba(255,107,53,0.2)", color: "#FF6B35" }}>📝 Review</button>
             </div>
 
-            {showMiss && <div className="no-print"><MissPanel onAdd={handleMissAdd} onClose={() => setShowMiss(false)} /></div>}
+            {blurb?.blurbs?.length > 0 && (
+              <div className="no-print" style={{ maxWidth: 560, margin: "16px auto 0" }}>
+                {blurb.blurbs.map((b, i) => (
+                  <div key={i} style={{ ...BOX, marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#C4982A", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{b.leg}</div>
+                    <div style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.6 }}>{b.description}</div>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="print-only">
               {cards.map((card, ci) => (
@@ -562,9 +591,8 @@ export default function App() {
                             display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                             padding: 6, background: isFree ? "#f0e6c8" : "white", textAlign: "center",
                           }}>
-                            <div style={{ fontSize: gridSize <= 3 ? 24 : gridSize <= 4 ? 20 : 16, marginBottom: 2 }}>{item.emoji}</div>
-                            <div style={{ fontSize: gridSize <= 3 ? 12 : gridSize <= 4 ? 10 : 9, fontWeight: 600, color: "#222", lineHeight: 1.15 }}>
-                              {isFree ? `${item.name} (START)` : item.name}
+                            <div style={{ fontSize: 9, fontWeight: 600, color: "#222", lineHeight: 1.15 }}>
+                              {isFree ? `${item.name} (FREE)` : item.name}
                             </div>
                           </div>
                         );
@@ -579,7 +607,7 @@ export default function App() {
 
         {/* ─── FEEDBACK ─── */}
         {phase === "feedback" && (
-          <div className="no-print" style={{ maxWidth: 520, margin: "0 auto", padding: "32px 24px" }}>
+          <div className="no-print" style={{ maxWidth: 520, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "#C4982A", marginBottom: 8 }}>Post-Trip Review</div>
               <div style={{ fontFamily: SF, fontSize: 22, fontWeight: 700, marginBottom: 8 }}>How&#39;d It Go?</div>
@@ -606,7 +634,7 @@ export default function App() {
                     ))}
                   </div>
                 ))}
-                <button onClick={() => setFbDone(true)} style={{ ...B1(false), marginTop: 24 }}>Submit Feedback</button>
+                <button onClick={() => { localStorage.removeItem("rtb_last_session"); setReturnBanner(null); setFbDone(true); }} style={{ ...B1(false), marginTop: 24 }}>Submit Feedback</button>
                 <div style={{ textAlign: "center", marginTop: 12 }}>
                   <button onClick={() => setPhase("cards")} style={{ background: "none", border: "none", color: "#6B5C48", cursor: "pointer", fontSize: 13 }}>← Back to cards</button>
                 </div>
