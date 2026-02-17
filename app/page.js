@@ -59,8 +59,12 @@ const PRINT_CSS = `
   .print-page {
     page-break-after: always;
     width: 100%;
-    padding: 0.5in;
+    min-height: 100vh;
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
   }
   .print-page:last-child { page-break-after: avoid; }
   .print-card {
@@ -180,12 +184,11 @@ function BingoCard({ card, size, idx, total }) {
 function MissPanel({ onAdd }) {
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
-  const [emoji, setEmoji] = useState("");
 
   const submit = () => {
     if (!name.trim()) return;
-    onAdd({ name: name.trim(), desc: desc.trim(), emoji: emoji.trim() || "📌", category: "custom", tier: "custom" });
-    setName(""); setDesc(""); setEmoji("");
+    onAdd({ name: name.trim(), desc: desc.trim(), emoji: "📌", category: "custom", tier: "custom" });
+    setName(""); setDesc("");
   };
 
   return (
@@ -195,8 +198,7 @@ function MissPanel({ onAdd }) {
         Add something you&#39;re seeing on the road. It&#39;ll swap out a filler item on all cards.
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <input style={{ ...IN, width: 50, flex: "none", textAlign: "center", fontSize: 18, padding: "8px 4px" }} value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="🏰" maxLength={2} />
-        <input style={{ ...IN, flex: 1, padding: "8px 12px" }} value={name} onChange={(e) => setName(e.target.value)} placeholder="What did you see?" onKeyDown={(e) => e.key === "Enter" && submit()} />
+        <input style={{ ...IN, flex: 1, padding: "8px 12px" }} value={name} onChange={(e) => setName(e.target.value)} placeholder="What will you see?" onKeyDown={(e) => e.key === "Enter" && submit()} />
       </div>
       <div style={{ display: "flex", gap: 8 }}>
         <input style={{ ...IN, flex: 1, padding: "8px 12px", fontSize: 14 }} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description (optional)" />
@@ -215,8 +217,8 @@ export default function App() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const gridSize = 5;
-  const [numCards, setNumCards] = useState(4);
-  const [gensLeft, setGensLeft] = useState(3);
+  const [numCardsStr, setNumCardsStr] = useState("4");
+  const [gensLeft, setGensLeft] = useState(10);
   const [routeData, setRouteData] = useState(null);
 
   const [wpInput, setWpInput] = useState("");
@@ -273,6 +275,7 @@ export default function App() {
 
   const generate = async () => {
     if (gensLeft <= 0) return;
+    const numCards = Math.min(20, Math.max(1, parseInt(numCardsStr) || 4));
     setGenError(null);
     setPhase("generating"); setProgress(0);
     const msgs = ["Checking community database...", "Scanning route corridor...", "Identifying landmarks...", "Balancing categories...", "Creating unique cards...", "Finalizing..."];
@@ -364,9 +367,8 @@ export default function App() {
       <div style={{ position: "relative", zIndex: 1 }}>
         {/* Header */}
         <header className="no-print" style={{ padding: "32px 24px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 4, color: "#C4982A", marginBottom: 8 }}>Road Trip</div>
-          <h1 style={{ fontFamily: SF, fontSize: "clamp(36px,6vw,52px)", fontWeight: 900, margin: 0, lineHeight: 1, background: "linear-gradient(180deg,#FFF9EE,#D4C5A9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>BINGO</h1>
-          <p style={{ fontSize: 14, color: "#A89270", marginTop: 8, fontStyle: "italic" }}>Turn any highway into an adventure</p>
+          <h1 style={{ fontFamily: SF, fontSize: "clamp(30px,6vw,48px)", fontWeight: 900, margin: 0, lineHeight: 1, background: "linear-gradient(180deg,#FFF9EE,#D4C5A9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Highway Bingo</h1>
+          <p style={{ fontSize: 14, color: "#A89270", marginTop: 8, fontStyle: "italic" }}>Turn your roadtrip into an adventure</p>
         </header>
 
         {/* ─── SETUP ─── */}
@@ -391,8 +393,8 @@ export default function App() {
             <div style={{ marginBottom: 28 }}><label style={L}>Destination</label><input style={IN} value={to} onChange={(e) => setTo(e.target.value)} placeholder="e.g. Berlin, Germany" /></div>
             <div style={{ marginBottom: 32 }}>
               <label style={L}>How many cards?</label>
-              <input type="number" min={1} max={20} style={IN}
-                value={numCards} onChange={(e) => setNumCards(Math.max(1, parseInt(e.target.value) || 1))} />
+              <input type="text" inputMode="numeric" style={IN}
+                value={numCardsStr} onChange={(e) => setNumCardsStr(e.target.value)} placeholder="1-20" />
             </div>
             <button onClick={planRoute} disabled={!from.trim() || !to.trim()} style={B1(!from.trim() || !to.trim())}>Plan My Route</button>
             {routeError && (
@@ -504,7 +506,7 @@ export default function App() {
                 <button onClick={generate} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
               </div>
             )}
-            <button onClick={generate} style={B1(false)}>Generate {numCards} Card{numCards !== 1 ? "s" : ""} 🎲</button>
+            <button onClick={generate} style={B1(false)}>Generate {Math.min(20, Math.max(1, parseInt(numCardsStr) || 4))} Card{Math.min(20, Math.max(1, parseInt(numCardsStr) || 4)) !== 1 ? "s" : ""} 🎲</button>
             <div style={{ textAlign: "center", marginTop: 12 }}>
               <button onClick={() => setPhase("route")} style={{ background: "none", border: "none", color: "#6B5C48", cursor: "pointer", fontSize: 13 }}>← Back to route</button>
             </div>
@@ -549,8 +551,6 @@ export default function App() {
               </div>
             )}
 
-            <div className="no-print"><MissPanel onAdd={handleMissAdd} /></div>
-
             <div className="screen-only" style={{ display: "flex", justifyContent: "center", width: "100%", boxSizing: "border-box", marginTop: 16 }}>
               <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
             </div>
@@ -559,9 +559,7 @@ export default function App() {
               {allItems.length} items in pool • Hover cells for details
             </div>
 
-            <div className="no-print" style={{ maxWidth: 460, margin: "16px auto 0", display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button onClick={() => { setFb({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, padding: "12px 14px", fontSize: 12, background: "rgba(255,107,53,0.08)", borderColor: "rgba(255,107,53,0.2)", color: "#FF6B35" }}>📝 Review</button>
-            </div>
+            <div className="no-print"><MissPanel onAdd={handleMissAdd} /></div>
 
             {blurb?.blurbs?.length > 0 && (
               <div className="no-print" style={{ maxWidth: 560, margin: "16px auto 0" }}>
@@ -575,6 +573,18 @@ export default function App() {
             )}
 
             <div className="print-only">
+              {blurb?.blurbs?.length > 0 && (
+                <div className="print-page" style={{ padding: "0.5in" }}>
+                  <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>Route Guide</div>
+                  <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{from} → {to}</div>
+                  {blurb.blurbs.map((b, i) => (
+                    <div key={i} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: i < blurb.blurbs.length - 1 ? "1px solid #ddd" : "none" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#8B6914", marginBottom: 6 }}>{b.leg}</div>
+                      <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7 }}>{b.description}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {cards.map((card, ci) => (
                 <div key={ci} className="print-page">
                   <div className="print-header">
