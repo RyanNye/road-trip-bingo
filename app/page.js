@@ -3,69 +3,10 @@
 import { useState, useRef } from "react";
 
 /*
-  ROAD TRIP BINGO — Functional Prototype
-  Demo route: Paris → Berlin
+  ROAD TRIP BINGO — Claude-Powered
+  Supports any route via Claude API
 */
 
-// ═══════════════════════════════════════════════════════════════
-// ROUTE DATA
-// ═══════════════════════════════════════════════════════════════
-
-const ROUTE = {
-  route_name: "A4 → E40 → A3 → A2",
-  route_summary: "East from Paris through Champagne, across Belgium via Liège, into Germany at Aachen, then autobahn through Cologne, Dortmund, Hannover, and Magdeburg to Berlin.",
-  major_waypoints: [
-    { name: "Reims", country: "France" },
-    { name: "Liège", country: "Belgium" },
-    { name: "Aachen", country: "Germany" },
-    { name: "Cologne", country: "Germany" },
-    { name: "Dortmund", country: "Germany" },
-    { name: "Hannover", country: "Germany" },
-    { name: "Magdeburg", country: "Germany" },
-  ],
-  notable_highway_landmarks: [
-    "Reims Cathedral spires visible from A4 bypass — where French kings were crowned for 800 years",
-    "Cologne Cathedral twin spires from the A4 Rhine bridge — took 632 years to complete",
-    "Former East-West German border near Helmstedt on A2 — once the world's most fortified frontier",
-    "Ruhr Valley industrial skyline from A2 — Europe's former steel and coal heartland",
-    "Magdeburg's Green Citadel (Hundertwasser building) visible from A2 approach",
-  ],
-  items: [
-    { name: "Cologne Cathedral Spires", emoji: "⛪", desc: "These 157m twin Gothic spires took 632 years to finish and survived 14 bombing raids in WWII. Visible for miles from the Rhine bridge.", category: "landmark", tier: "legendary" },
-    { name: "Former East-West Border", emoji: "🚧", desc: "Near Helmstedt — once the most heavily guarded border in the world. Look for memorial markers and old checkpoint infrastructure on the A2.", category: "infrastructure", tier: "legendary" },
-    { name: "Reims Cathedral", emoji: "🏛️", desc: "Where 33 French kings were crowned over 800 years. Gothic towers visible from the A4 bypass south of the city.", category: "landmark", tier: "legendary" },
-    { name: "Rhine River Crossing", emoji: "🌊", desc: "One of Europe's great rivers — you cross it near Cologne. Watch for massive barges carrying cargo up and down the waterway.", category: "landmark", tier: "listed" },
-    { name: "Champagne Vineyards", emoji: "🍇", desc: "Rolling hillside vineyards east of Paris — you're driving through the world's most famous sparkling wine region.", category: "landscape", tier: "listed" },
-    { name: "French Péage Toll Plaza", emoji: "💶", desc: "France's autoroute toll system — take a ticket entering, pay when exiting. Have coins or a card ready.", category: "infrastructure", tier: "listed" },
-    { name: "Aachen City Silhouette", emoji: "🏙️", desc: "Charlemagne's capital — the cathedral dome (first UNESCO site in Germany) peeks above the skyline as you pass on the A4.", category: "landmark", tier: "listed" },
-    { name: "Wind Turbines", emoji: "💨", desc: "Massive wind farms on the flat North German Plain — Germany produces more wind energy than any other European country.", category: "landscape", tier: "listed" },
-    { name: "Autobahn No-Limit Sign", emoji: "🏎️", desc: "Round white sign with diagonal black lines = no speed limit. About 70% of the autobahn has no permanent limit.", category: "culture", tier: "listed" },
-    { name: "Ruhr Valley Smokestacks", emoji: "🏭", desc: "Old industrial chimneys mixed with modern buildings — once Europe's steel heartland, now reinventing as a tech hub.", category: "infrastructure", tier: "listed" },
-    { name: "Belgian Border Sign", emoji: "🇧🇪", desc: "A small sign on the highway and maybe a surface change. No checkpoints since Schengen 1985.", category: "infrastructure", tier: "listed" },
-    { name: "Half-Timbered Houses", emoji: "🏘️", desc: "Fachwerk houses with exposed wooden framing — distinctive across western Germany, visible in towns near highway exits.", category: "culture", tier: "community_verified" },
-    { name: "French-Belgian Border", emoji: "🇪🇺", desc: "Blink and you'll miss it — just a small sign. The road surface might change though.", category: "infrastructure", tier: "community_verified" },
-    { name: "Yellow Rapeseed Field", emoji: "🌼", desc: "Brilliant yellow fields of rapeseed (canola) — especially common April to June across northern France and Germany.", category: "landscape", tier: "community_verified" },
-    { name: "Truck Convoy", emoji: "🚛", desc: "Long lines of trucks in the right lane — Europe's freight backbone. Spot plates from Poland, Romania, Netherlands.", category: "vehicle", tier: "community_verified" },
-    { name: "Church Steeple", emoji: "⛪", desc: "Nearly every European village has one poking above rooftops — count how many different styles you spot.", category: "culture", tier: "generic" },
-    { name: "Red-Roofed Village", emoji: "🏠", desc: "Clusters of terracotta roof tiles — the traditional roofing material across northern France and western Germany.", category: "culture", tier: "generic" },
-    { name: "Solar Panel Array", emoji: "☀️", desc: "Fields or rooftops covered in dark blue panels — Germany was an early leader in solar energy.", category: "landscape", tier: "generic" },
-    { name: "Rest Stop (Raststätte)", emoji: "🅿️", desc: "German highway rest stops — often nicer than expected, with hot food, bakeries, and sometimes playgrounds.", category: "infrastructure", tier: "generic" },
-    { name: "ICE Train", emoji: "🚄", desc: "Germany's high-speed InterCity Express runs up to 300 km/h — white streamlined trains on parallel tracks.", category: "vehicle", tier: "generic" },
-    { name: "TGV Train", emoji: "🚆", desc: "France's Train à Grande Vitesse — one of the world's first high-speed rail systems, running since 1981.", category: "vehicle", tier: "generic" },
-    { name: "Grain Silo", emoji: "🌾", desc: "Tall cylindrical towers near farms — the flat plains are major grain regions.", category: "landscape", tier: "generic" },
-    { name: "Sound Barrier Wall", emoji: "🧱", desc: "Germany builds extensive noise barriers along the autobahn near towns — a sign of strong environmental regulation.", category: "infrastructure", tier: "generic" },
-    { name: "River Barge", emoji: "🚢", desc: "Flat-bottomed cargo ships on the Rhine or canals — inland waterways carry 30% of freight in the Rhine corridor.", category: "vehicle", tier: "generic" },
-    { name: "Speed Camera Warning", emoji: "📸", desc: "Triangle signs warning of cameras ahead — France and Germany both use them. In France, the camera itself may be hidden.", category: "infrastructure", tier: "generic" },
-    { name: "Castle on a Hill", emoji: "🏰", desc: "Medieval fortresses dot the Rhine and Meuse valleys — built for defense, many are now museums or hotels.", category: "landmark", tier: "generic" },
-    { name: "Flat Plains to Horizon", emoji: "🌍", desc: "East of Hannover the land is pancake-flat in every direction. This terrain shaped warfare for centuries.", category: "landscape", tier: "generic" },
-    { name: "Roundabout", emoji: "🔄", desc: "France has 30,000+ roundabouts — more than any country on earth. You'll hit several leaving any French city.", category: "infrastructure", tier: "generic" },
-    { name: "Foreign License Plate", emoji: "🚗", desc: "Blue EU stripe on the left — try to spot plates from as many countries as possible.", category: "vehicle", tier: "generic" },
-    { name: "Highway Overpass", emoji: "🌉", desc: "Elevated viaducts crossing valleys — some span hundreds of meters with dramatic views.", category: "infrastructure", tier: "generic" },
-    { name: "Autobahnkreuz", emoji: "🔀", desc: "Germany's massive highway interchanges where autobahns cross — multi-level cloverleaf designs.", category: "infrastructure", tier: "generic" },
-    { name: "Forest Corridor", emoji: "🌲", desc: "Dense managed forest on both sides — Germany's forests cover a third of the country.", category: "landscape", tier: "generic" },
-    { name: "Blue Highway Signs", emoji: "🔵", desc: "Germany uses blue for autobahn directions — watch for the switch from France's green signs at the border.", category: "culture", tier: "generic" },
-  ],
-};
 
 // ═══════════════════════════════════════════════════════════════
 // STYLES
@@ -284,11 +225,12 @@ function MissPanel({ onAdd, onClose }) {
 
 export default function App() {
   const [phase, setPhase] = useState("setup");
-  const [from, setFrom] = useState("Paris, France");
-  const [to, setTo] = useState("Berlin, Germany");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [gridSize, setGridSize] = useState(4);
   const [numCards, setNumCards] = useState(4);
   const [gensLeft, setGensLeft] = useState(3);
+  const [routeData, setRouteData] = useState(null);
 
   const [wpInput, setWpInput] = useState("");
   const [waypoints, setWaypoints] = useState([]);
@@ -308,9 +250,22 @@ export default function App() {
 
   const freeItem = { name: from.split(",")[0].trim(), emoji: "📍", desc: "", category: "free", tier: "free" };
 
-  const planRoute = () => {
+  const planRoute = async () => {
     setPhase("loading");
-    setTimeout(() => setPhase("route"), 1200);
+    try {
+      const res = await fetch("/api/analyze-route", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to, waypoints }),
+      });
+      if (!res.ok) throw new Error("Route analysis failed");
+      const data = await res.json();
+      setRouteData(data);
+      setPhase("route");
+    } catch (err) {
+      alert("Failed to analyze route: " + err.message);
+      setPhase("setup");
+    }
   };
 
   const addCustom = () => {
@@ -319,7 +274,7 @@ export default function App() {
     setCiName(""); setCiDesc(""); setCiEmoji("");
   };
 
-  const generate = () => {
+  const generate = async () => {
     if (gensLeft <= 0) return;
     setPhase("generating"); setProgress(0);
     const msgs = ["Checking community database...", "Scanning route corridor...", "Identifying landmarks...", "Balancing categories...", "Creating unique cards...", "Finalizing..."];
@@ -329,16 +284,36 @@ export default function App() {
       mi = Math.min(mi + 1, msgs.length - 1); setLoadMsg(msgs[mi]);
     }, 400);
 
-    setTimeout(() => {
+    try {
+      const res = await fetch("/api/generate-items", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          route_name: routeData?.route_name,
+          route_summary: routeData?.route_summary,
+          major_waypoints: routeData?.major_waypoints,
+          route_coordinates: routeData?.route_coordinates,
+          _routeId: routeData?._routeId,
+          from,
+          to,
+        }),
+      });
+      if (!res.ok) throw new Error("Item generation failed");
+      const data = await res.json();
+
       clearInterval(progRef.current); setProgress(100); setLoadMsg("Done!");
-      const pool = [...customItems, ...ROUTE.items];
+      const pool = [...customItems, ...(data.items || [])];
       setAllItems(pool);
       const guaranteed = pool.filter((i) => i.tier === "custom" || i.tier === "legendary" || i.tier === "community_verified");
       const built = [];
       for (let i = 0; i < numCards; i++) built.push(buildCard(pool, guaranteed, gridSize, freeItem));
       setCards(built); setActiveCard(0); setGensLeft((p) => p - 1);
       setTimeout(() => setPhase("cards"), 300);
-    }, 2500);
+    } catch (err) {
+      clearInterval(progRef.current);
+      alert("Failed to generate items: " + err.message);
+      setPhase("custom");
+    }
   };
 
   const handleMissAdd = (newItem) => {
@@ -360,7 +335,7 @@ export default function App() {
 
   const reset = () => {
     setPhase("setup"); setCards([]); setAllItems([]); setCustomItems([]);
-    setActiveCard(0); setWaypoints([]); setShowMiss(false);
+    setActiveCard(0); setWaypoints([]); setShowMiss(false); setRouteData(null);
   };
 
   const [fb, setFb] = useState({});
@@ -456,21 +431,21 @@ export default function App() {
             </div>
             <div style={BOX}>
               <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Route</div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{ROUTE.route_name}</div>
-              <div style={{ fontSize: 14, color: "#8B7355", lineHeight: 1.5 }}>{ROUTE.route_summary}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{routeData?.route_name}</div>
+              <div style={{ fontSize: 14, color: "#8B7355", lineHeight: 1.5 }}>{routeData?.route_summary}</div>
             </div>
             <div style={BOX}>
               <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Passing Through</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {ROUTE.major_waypoints.map((wp, i) => (
+                {routeData?.major_waypoints.map((wp, i) => (
                   <div key={i} style={{ background: "rgba(196,152,42,0.1)", border: "1px solid rgba(196,152,42,0.25)", borderRadius: 100, padding: "6px 14px", fontSize: 13, fontWeight: 600, color: "#C4982A" }}>{wp.name}, {wp.country}</div>
                 ))}
               </div>
             </div>
             <div style={{ ...BOX, background: "rgba(196,152,42,0.06)", borderColor: "rgba(196,152,42,0.15)" }}>
               <div style={{ fontSize: 12, color: "#C4982A", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>⭐ Notable Highway Landmarks</div>
-              {ROUTE.notable_highway_landmarks.map((lm, i) => (
-                <div key={i} style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.5, padding: "6px 0", borderBottom: i < ROUTE.notable_highway_landmarks.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>{lm}</div>
+              {routeData?.notable_highway_landmarks.map((lm, i) => (
+                <div key={i} style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.5, padding: "6px 0", borderBottom: i < routeData?.notable_highway_landmarks.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>{lm}</div>
               ))}
             </div>
             <div style={{ display: "flex", gap: 12 }}>
@@ -528,7 +503,7 @@ export default function App() {
             <div style={{ width: 56, height: 56, margin: "0 auto 20px", borderRadius: "50%", border: "3px solid rgba(196,152,42,0.2)", borderTopColor: "#C4982A", animation: "spin 1s linear infinite" }} />
             <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
             <div style={{ fontFamily: SF, fontSize: 20, fontWeight: 700, marginBottom: 8 }}>{loadMsg}</div>
-            <div style={{ fontSize: 13, color: "#6B5C48", marginBottom: 20 }}>{from} → {to} via {ROUTE.route_name}</div>
+            <div style={{ fontSize: 13, color: "#6B5C48", marginBottom: 20 }}>{from} → {to} via {routeData?.route_name}</div>
             <div style={{ width: "100%", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
               <div style={{ width: `${progress}%`, height: "100%", background: "linear-gradient(90deg,#8B6914,#C4982A)", transition: "width 0.3s" }} />
             </div>
@@ -544,7 +519,7 @@ export default function App() {
                 <button onClick={handlePrint} style={{ ...B2, background: "rgba(196,152,42,0.08)", borderColor: "rgba(196,152,42,0.2)", color: "#C4982A" }}>🖨️ Print All</button>
               </div>
             </div>
-            <div className="no-print" style={{ textAlign: "center", fontSize: 12, color: "#6B5C48", marginBottom: 12 }}>{from} → {to} via {ROUTE.route_name}</div>
+            <div className="no-print" style={{ textAlign: "center", fontSize: 12, color: "#6B5C48", marginBottom: 12 }}>{from} → {to} via {routeData?.route_name}</div>
 
             {cards.length > 1 && (
               <div className="no-print" style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
