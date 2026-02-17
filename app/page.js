@@ -82,7 +82,12 @@ const PRINT_CSS = `
   .print-card .free-cell {
     background: #f0e6c8 !important;
   }
-  .print-header { display: none !important; }
+  .print-header {
+    text-align: center;
+    margin-bottom: 20px;
+    font-family: 'Playfair Display', Georgia, serif;
+  }
+  .print-header h2 { font-size: 26px; font-weight: 800; margin: 0; color: #222; line-height: 1.2; }
   .screen-only { display: none !important; }
 }
 @media screen {
@@ -227,7 +232,6 @@ export default function App() {
   const [customItems, setCustomItems] = useState([]);
   const [ciName, setCiName] = useState("");
   const [ciDesc, setCiDesc] = useState("");
-  const [ciEmoji, setCiEmoji] = useState("");
 
   const [allItems, setAllItems] = useState([]);
   const [cards, setCards] = useState([]);
@@ -241,7 +245,7 @@ export default function App() {
   const [routeError, setRouteError] = useState(null);
   const [genError, setGenError] = useState(null);
 
-  const freeItem = { name: "First Bathroom Stop", emoji: "🚻", desc: "", category: "free", tier: "free" };
+  const freeItem = { name: "Pit Stop", emoji: "🚻", desc: "", category: "free", tier: "free" };
 
   useEffect(() => {
     const s = localStorage.getItem("rtb_last_session");
@@ -269,8 +273,8 @@ export default function App() {
 
   const addCustom = () => {
     if (!ciName.trim()) return;
-    setCustomItems((p) => [...p, { name: ciName.trim(), desc: ciDesc.trim(), emoji: ciEmoji.trim() || "📌", category: "custom", tier: "custom" }]);
-    setCiName(""); setCiDesc(""); setCiEmoji("");
+    setCustomItems((p) => [...p, { name: ciName.trim(), desc: ciDesc.trim(), emoji: "📌", category: "custom", tier: "custom" }]);
+    setCiName(""); setCiDesc("");
   };
 
   const generate = async () => {
@@ -335,16 +339,24 @@ export default function App() {
 
   const handleMissAdd = (newItem) => {
     setAllItems((prev) => [...prev, newItem]);
-    setCards((prev) => prev.map((card) => {
-      const replaceIdx = card.findIndex((it, i) => {
-        const center = gridSize % 2 === 1 ? Math.floor((gridSize * gridSize) / 2) : -1;
-        return i !== center && it.tier === "generic";
-      });
-      if (replaceIdx === -1) return card;
-      const newCard = [...card];
-      newCard[replaceIdx] = newItem;
-      return newCard;
-    }));
+    setCards((prev) => {
+      const tierRank = { generic: 0, ai_generated: 1, listed: 2, community_verified: 3, legendary: 4, custom: 5, free: 6 };
+      const center = gridSize % 2 === 1 ? Math.floor((gridSize * gridSize) / 2) : -1;
+      // Find the least important item name appearing in any card
+      let target = null;
+      for (const card of prev) {
+        for (let i = 0; i < card.length; i++) {
+          const item = card[i];
+          if (i === center || item.tier === "free" || item.tier === "custom") continue;
+          if (!target || (tierRank[item.tier] ?? 1) < (tierRank[target.tier] ?? 1)) target = item;
+        }
+      }
+      if (!target) return prev;
+      // Replace every occurrence of that item name across all cards
+      return prev.map((card) =>
+        card.map((item, i) => (i !== center && item.name === target.name ? newItem : item))
+      );
+    });
   };
 
   const handlePrint = () => window.print();
@@ -367,7 +379,7 @@ export default function App() {
       <div style={{ position: "relative", zIndex: 1 }}>
         {/* Header */}
         <header className="no-print" style={{ padding: "32px 24px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <h1 style={{ fontFamily: SF, fontSize: "clamp(30px,6vw,48px)", fontWeight: 900, margin: 0, lineHeight: 1, background: "linear-gradient(180deg,#FFF9EE,#D4C5A9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>Highway Bingo</h1>
+          <h1 style={{ fontFamily: SF, fontSize: "clamp(30px,6vw,48px)", fontWeight: 900, margin: 0, lineHeight: 1.2, paddingBottom: "0.1em", background: "linear-gradient(180deg,#FFF9EE,#D4C5A9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", display: "inline-block" }}>Highway Bingo</h1>
           <p style={{ fontSize: 14, color: "#A89270", marginTop: 8, fontStyle: "italic" }}>Turn your roadtrip into an adventure</p>
         </header>
 
@@ -431,7 +443,7 @@ export default function App() {
             <div style={{ marginBottom: 20 }}>
               <label style={L}>Add Waypoints (optional)</label>
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input style={{ ...IN, flex: 1, padding: "10px 14px" }} value={wpInput} onChange={(e) => setWpInput(e.target.value)} placeholder="e.g. Cologne, Brussels..."
+                <input style={{ ...IN, flex: 1, padding: "10px 14px" }} value={wpInput} onChange={(e) => setWpInput(e.target.value)} placeholder="your favorite pitstop"
                   onKeyDown={(e) => { if (e.key === "Enter" && wpInput.trim()) { setWaypoints((p) => [...p, wpInput.trim()]); setWpInput(""); } }} />
                 <button onClick={() => { if (wpInput.trim()) { setWaypoints((p) => [...p, wpInput.trim()]); setWpInput(""); } }} disabled={!wpInput.trim()} style={{ ...B2, padding: "10px 18px", opacity: wpInput.trim() ? 1 : 0.4, color: wpInput.trim() ? "#C4982A" : "#6B5C48" }}>Add</button>
               </div>
@@ -483,7 +495,6 @@ export default function App() {
               <div style={{ marginBottom: 20 }}>
                 {customItems.map((item, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(224,107,143,0.08)", border: "1px solid rgba(224,107,143,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 8 }}>
-                    <span style={{ fontSize: 18 }}>{item.emoji}</span>
                     <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{item.name}</div>{item.desc && <div style={{ fontSize: 12, color: "#8B7355" }}>{item.desc}</div>}</div>
                     <button onClick={() => setCustomItems((p) => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#E06B8F", cursor: "pointer", fontSize: 16 }}>✕</button>
                   </div>
@@ -492,7 +503,6 @@ export default function App() {
             )}
             <div style={{ ...BOX, padding: 16 }}>
               <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input style={{ ...IN, width: 50, flex: "none", textAlign: "center", fontSize: 18, padding: "8px 4px" }} value={ciEmoji} onChange={(e) => setCiEmoji(e.target.value)} placeholder="🏰" maxLength={2} />
                 <input style={{ ...IN, flex: 1, padding: "8px 12px" }} value={ciName} onChange={(e) => setCiName(e.target.value)} placeholder="Item name" onKeyDown={(e) => e.key === "Enter" && addCustom()} />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -551,18 +561,8 @@ export default function App() {
               </div>
             )}
 
-            <div className="screen-only" style={{ display: "flex", justifyContent: "center", width: "100%", boxSizing: "border-box", marginTop: 16 }}>
-              <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
-            </div>
-
-            <div className="no-print" style={{ maxWidth: 560, margin: "12px auto 0", textAlign: "center", fontSize: 12, color: "#6B5C48" }}>
-              {allItems.length} items in pool • Hover cells for details
-            </div>
-
-            <div className="no-print"><MissPanel onAdd={handleMissAdd} /></div>
-
             {blurb?.blurbs?.length > 0 && (
-              <div className="no-print" style={{ maxWidth: 560, margin: "16px auto 0" }}>
+              <div className="no-print" style={{ maxWidth: 560, margin: "0 auto 16px" }}>
                 {blurb.blurbs.map((b, i) => (
                   <div key={i} style={{ ...BOX, marginBottom: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#C4982A", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{b.leg}</div>
@@ -571,6 +571,12 @@ export default function App() {
                 ))}
               </div>
             )}
+
+            <div className="screen-only" style={{ display: "flex", justifyContent: "center", width: "100%", boxSizing: "border-box" }}>
+              <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
+            </div>
+
+            <div className="no-print"><MissPanel onAdd={handleMissAdd} /></div>
 
             <div className="print-only">
               {blurb?.blurbs?.length > 0 && (
@@ -588,8 +594,7 @@ export default function App() {
               {cards.map((card, ci) => (
                 <div key={ci} className="print-page">
                   <div className="print-header">
-                    <h2>Road Trip BINGO</h2>
-                    <p>{from} → {to} • Card {ci + 1} of {cards.length}</p>
+                    <h2>{from.split(",")[0].trim()} to {to.split(",")[0].trim()} Highway Bingo!</h2>
                   </div>
                   <div className="print-card" style={{ borderRadius: 12, padding: 16, border: "2px solid #333" }}>
                     <div style={{ display: "grid", gridTemplateColumns: `repeat(${gridSize},1fr)`, gap: 4 }}>
