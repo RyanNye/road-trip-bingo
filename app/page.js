@@ -300,7 +300,8 @@ export default function App() {
   const [to, setTo] = useState("");
   const gridSize = 5;
   const [numCardsStr, setNumCardsStr] = useState("4");
-  const [gensLeft, setGensLeft] = useState(10);
+  const [gensLeft, setGensLeft] = useState(null); // null = loading from server
+  const [userUuid, setUserUuid] = useState(null);
   const [routeData, setRouteData] = useState(null);
 
   const [wpInput, setWpInput] = useState("");
@@ -362,6 +363,20 @@ export default function App() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("from")) setFrom(params.get("from"));
     if (params.get("to")) setTo(params.get("to"));
+
+    // Load or create a persistent UUID for this browser
+    let uuid = localStorage.getItem("rtb_user_uuid");
+    if (!uuid) {
+      uuid = crypto.randomUUID();
+      localStorage.setItem("rtb_user_uuid", uuid);
+    }
+    setUserUuid(uuid);
+
+    // Fetch remaining generations from server
+    fetch(`/api/generations?uuid=${uuid}`)
+      .then((r) => r.json())
+      .then((d) => setGensLeft(d.remaining ?? 10))
+      .catch(() => setGensLeft(10)); // fallback if API is down
   }, []);
 
   const planRoute = async () => {
@@ -400,7 +415,7 @@ export default function App() {
   };
 
   const generate = async () => {
-    if (gensLeft <= 0) return;
+    if (gensLeft === null || gensLeft <= 0) return;
     const numCards = Math.min(20, Math.max(1, parseInt(numCardsStr) || 4));
     const isSplit = legChoice === "split" && routeData?.suggested_legs?.length > 1;
     const legsToGenerate = isSplit ? routeData.suggested_legs : null;
@@ -477,8 +492,12 @@ export default function App() {
         setCards([]);
         setAllItems([]);
         setBlurb(null);
-        setGensLeft((p) => p - gensNeeded);
         setActiveCard(0);
+        fetch("/api/generations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uuid: userUuid, count: gensNeeded }),
+        }).then((r) => r.json()).then((d) => { if (d.remaining != null) setGensLeft(d.remaining); });
 
         localStorage.setItem("rtb_last_session", JSON.stringify({
           from, to, routeId: routeData._routeId,
@@ -531,7 +550,12 @@ export default function App() {
         const guaranteed = pool.filter((i) => i.tier === "custom" || i.tier === "legendary" || i.tier === "community_verified");
         const built = [];
         for (let i = 0; i < numCards; i++) built.push(buildCard(pool, guaranteed, gridSize, freeItem));
-        setCards(built); setActiveCard(0); setGensLeft((p) => p - 1);
+        setCards(built); setActiveCard(0);
+        fetch("/api/generations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ uuid: userUuid, count: 1 }),
+        }).then((r) => r.json()).then((d) => { if (d.remaining != null) setGensLeft(d.remaining); });
         setTimeout(() => setPhase("cards"), 300);
       }
     } catch (err) {
@@ -626,7 +650,7 @@ export default function App() {
             )}
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
               <div style={{ background: "rgba(196,152,42,0.1)", border: "1px solid rgba(196,152,42,0.3)", borderRadius: 100, padding: "8px 20px", fontSize: 13, fontWeight: 600, color: "#C4982A" }}>
-                {gensLeft} free generation{gensLeft !== 1 ? "s" : ""} remaining
+                {gensLeft === null ? "Loading..." : `${gensLeft} free generation${gensLeft !== 1 ? "s" : ""} remaining`}
               </div>
             </div>
             <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><input style={IN} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Chicago, IL" /></div>
