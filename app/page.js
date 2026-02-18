@@ -1,7 +1,22 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
 import AffiliateButtons from "@/app/components/AffiliateButtons";
+
+const RouteMap = dynamic(() => import("@/app/components/RouteMap"), {
+  ssr: false,
+  loading: () => (
+    <div style={{
+      width: "100%", height: 340, borderRadius: 12,
+      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      color: "#6B5C48", fontSize: 14,
+    }}>
+      Loading map...
+    </div>
+  ),
+});
 
 /*
   ROAD TRIP BINGO — Claude-Powered
@@ -307,8 +322,8 @@ export default function App() {
   const [numCardsStr, setNumCardsStr] = useState("4");
   const [routeData, setRouteData] = useState(null);
 
-  const [wpInput, setWpInput] = useState("");
   const [waypoints, setWaypoints] = useState([]);
+  const [mapWaypoints, setMapWaypoints] = useState([]);
 
   const [customItems, setCustomItems] = useState([]);
   const [ciName, setCiName] = useState("");
@@ -369,15 +384,17 @@ export default function App() {
 
   }, []);
 
-  const planRoute = async () => {
+  const planRoute = async (overrideWaypoints) => {
     setRouteError(null);
     setLegChoice(null);
+    setMapWaypoints([]);
     setPhase("loading");
     try {
+      const wps = overrideWaypoints ?? waypoints;
       const res = await fetch("/api/analyze-route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to, waypoints }),
+        body: JSON.stringify({ from, to, waypoints: wps }),
       });
       if (!res.ok) throw new Error("Route analysis failed");
       const data = await res.json();
@@ -395,6 +412,14 @@ export default function App() {
     } catch (err) {
       setRouteError(err.message);
       setPhase("setup");
+    }
+  };
+
+  const handleLooksGood = () => {
+    if (mapWaypoints.length > 0) {
+      planRoute(mapWaypoints);
+    } else {
+      setPhase("custom");
     }
   };
 
@@ -576,6 +601,7 @@ export default function App() {
     setPhase("setup"); setCards([]); setAllItems([]); setCustomItems([]);
     setActiveCard(0); setWaypoints([]); setRouteData(null); setBlurb(null);
     setLegs([]); setActiveLeg(0); setLegChoice(null); setFbNotes({});
+    setMapWaypoints([]);
   };
 
   const handleSubmitFeedback = async () => {
@@ -657,26 +683,29 @@ export default function App() {
 
         {/* ─── ROUTE CONFIRM ─── */}
         {phase === "route" && (
-          <div className="no-print" style={{ maxWidth: 520, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
+          <div className="no-print" style={{ maxWidth: 680, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "#C4982A", marginBottom: 8 }}>Confirm Your Route</div>
               <div style={{ fontFamily: SF, fontSize: 24, fontWeight: 700 }}>{from} → {to}</div>
-              <div style={{ fontSize: 13, color: "#6B5C48", marginTop: 4 }}>Add waypoints to customize your path</div>
+              <div style={{ fontSize: 13, color: "#6B5C48", marginTop: 4 }}>Drag the route to adjust your path</div>
             </div>
             <div style={{ marginBottom: 20 }}>
-              <label style={L}>Add Waypoints (optional)</label>
-              <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-                <input style={{ ...IN, flex: 1, padding: "10px 14px" }} value={wpInput} onChange={(e) => setWpInput(e.target.value)} placeholder="... Add your favorite detour"
-                  onKeyDown={(e) => { if (e.key === "Enter" && wpInput.trim()) { setWaypoints((p) => [...p, wpInput.trim()]); setWpInput(""); } }} />
-                <button onClick={() => { if (wpInput.trim()) { setWaypoints((p) => [...p, wpInput.trim()]); setWpInput(""); } }} disabled={!wpInput.trim()} style={{ ...B2, padding: "10px 18px", opacity: wpInput.trim() ? 1 : 0.4, color: wpInput.trim() ? "#C4982A" : "#6B5C48" }}>Add</button>
-              </div>
-              {waypoints.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                  {waypoints.map((wp, i) => (
-                    <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(224,107,143,0.08)", border: "1px solid rgba(224,107,143,0.2)", borderRadius: 100, padding: "4px 12px", fontSize: 13, color: "#E06B8F" }}>
-                      {wp} <button onClick={() => setWaypoints((p) => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", color: "#E06B8F", cursor: "pointer", fontSize: 14 }}>✕</button>
-                    </div>
-                  ))}
+              <RouteMap
+                from={from}
+                to={to}
+                routeCoords={routeData?.route_coordinates || []}
+                onWaypointsChange={setMapWaypoints}
+              />
+              {mapWaypoints.length > 0 && (
+                <div style={{ marginTop: 10 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "#A89270", marginBottom: 6 }}>Via your adjusted route</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {mapWaypoints.map((wp, i) => (
+                      <div key={i} style={{ background: "rgba(196,152,42,0.1)", border: "1px solid rgba(196,152,42,0.3)", borderRadius: 100, padding: "4px 12px", fontSize: 13, color: "#C4982A" }}>
+                        {wp}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -733,11 +762,13 @@ export default function App() {
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={reset} style={{ ...B2, flex: 1, padding: 14 }}>← Back</button>
               <button
-                onClick={() => setPhase("custom")}
+                onClick={handleLooksGood}
                 disabled={isLongRoute && !legChoice}
                 style={{ ...B1(isLongRoute && !legChoice), flex: 2 }}
               >
-                Looks Good — Next →
+                {mapWaypoints.length > 0
+                  ? "Apply Route Adjustments →"
+                  : "Looks Good — Next →"}
               </button>
             </div>
           </div>
