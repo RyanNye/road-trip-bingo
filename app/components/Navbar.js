@@ -45,12 +45,6 @@ export default function Navbar() {
       .catch(() => setTierLoaded(true));
   }, []);
 
-  const startCheckout = async () => {
-    const res = await fetch("/api/checkout", { method: "POST" });
-    const { url } = await res.json();
-    if (url) window.location.href = url;
-  };
-
   return (
     <nav className="no-print" style={{
       background: "rgba(28,16,8,0.97)",
@@ -119,15 +113,16 @@ export default function Navbar() {
 
         {/* Upgrade to Pro link (desktop, free users only) */}
         {tierLoaded && !isPro && (
-          <button onClick={startCheckout} className="nav-cta" style={{
+          <Link href="/upgrade" className="nav-cta" style={{
             padding: "7px 14px", background: "transparent",
             border: "1px solid rgba(196,152,42,0.4)", borderRadius: 8,
             color: "#C4982A", fontSize: 12, fontWeight: 700, fontFamily: F,
-            cursor: "pointer", letterSpacing: 0.5, marginRight: 8, flexShrink: 0,
+            letterSpacing: 0.5, marginRight: 8, flexShrink: 0,
+            textDecoration: "none",
             display: "none", // shown via media query
           }}>
             Upgrade to Pro
-          </button>
+          </Link>
         )}
 
         {/* Generate CTA */}
@@ -185,13 +180,12 @@ export default function Navbar() {
             </Link>
           ))}
           {tierLoaded && !isPro && (
-            <button onClick={() => { setMobileOpen(false); startCheckout(); }} style={{
+            <Link href="/upgrade" onClick={() => setMobileOpen(false)} style={{
               padding: "10px 16px", fontSize: 14, fontFamily: F, fontWeight: 700,
-              color: "#C4982A", background: "none", border: "none", cursor: "pointer",
-              textAlign: "left",
+              color: "#C4982A", textDecoration: "none", display: "block",
             }}>
               Upgrade to Pro — $5/year
-            </button>
+            </Link>
           )}
         </div>
       )}
