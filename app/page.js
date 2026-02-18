@@ -68,15 +68,17 @@ const PRINT_CSS = `
   .screen-wrapper { display: none !important; }
   .print-page {
     page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
     width: 100%;
-    min-height: 100vh;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
   }
-  .print-page:last-child { page-break-after: avoid; }
+  .print-page:last-child { page-break-after: avoid; break-after: avoid; }
   .print-card {
     border: 2px solid #333 !important;
     background: white !important;
