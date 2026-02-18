@@ -674,16 +674,32 @@ export default function App() {
             )}
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
               <div style={{ background: isPro ? "rgba(106,176,46,0.12)" : "rgba(196,152,42,0.1)", border: `1px solid ${isPro ? "rgba(106,176,46,0.3)" : "rgba(196,152,42,0.3)"}`, borderRadius: 100, padding: "8px 20px", fontSize: 13, fontWeight: 600, color: isPro ? "#6ab02e" : "#C4982A" }}>
-                {gensLeft === null && !isPro ? "Loading..." : isPro ? "✦ Pro — Unlimited generations" : `${gensLeft} free generation${gensLeft !== 1 ? "s" : ""} remaining`}
+                {gensLeft === null && !isPro ? "Loading..." : isPro ? "✦ Pro — Unlimited generations" : `${gensLeft} of 10 free uses remaining`}
               </div>
             </div>
 
             {/* Upgrade prompt — shown when free user hits limit */}
             {gensLeft === 0 && !isPro && (
-              <div style={{ marginBottom: 24, padding: 20, background: "rgba(196,152,42,0.06)", border: "1px solid rgba(196,152,42,0.25)", borderRadius: 14, textAlign: "center" }}>
-                <div style={{ fontFamily: SF, fontSize: 18, fontWeight: 700, marginBottom: 6 }}>You&apos;ve used all 10 free generations</div>
-                <div style={{ fontSize: 13, color: "#8B7355", marginBottom: 16, lineHeight: 1.5 }}>Upgrade to Pro for unlimited bingo cards — for every trip, every year.</div>
-                <button onClick={startCheckout} style={{ ...B1(false), padding: "14px 24px", fontSize: 15 }}>Upgrade to Pro — $5/year</button>
+              <div style={{ marginBottom: 24, padding: 24, background: "rgba(196,152,42,0.06)", border: "1px solid rgba(196,152,42,0.25)", borderRadius: 14 }}>
+                <div style={{ fontFamily: SF, fontSize: 20, fontWeight: 800, marginBottom: 4, textAlign: "center" }}>Upgrade to Highway Bingo Pro</div>
+                <div style={{ fontSize: 13, color: "#8B7355", marginBottom: 20, textAlign: "center" }}>You&apos;ve used all 10 free generations this year.</div>
+                <div style={{ marginBottom: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    { icon: "♾️", label: "Unlimited generations", sub: "Every trip, all year long" },
+                    { icon: "🗂️", label: "Category filtering", sub: "Coming soon" },
+                    { icon: "📖", label: "Item descriptions & trivia", sub: "Coming soon" },
+                    { icon: "❤️", label: "Support an indie developer", sub: "Keep Highway Bingo free for everyone" },
+                  ].map(({ icon, label, sub }) => (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontSize: 20, width: 28, textAlign: "center", flexShrink: 0 }}>{icon}</span>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "#FFF9EE" }}>{label}</div>
+                        <div style={{ fontSize: 12, color: "#6B5C48" }}>{sub}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={startCheckout} style={B1(false)}>Upgrade to Pro — $5/year</button>
               </div>
             )}
             <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><input style={IN} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Chicago, IL" /></div>
@@ -840,9 +856,25 @@ export default function App() {
               </div>
             )}
             {gensLeft === 0 && !isPro ? (
-              <div style={{ padding: 20, background: "rgba(196,152,42,0.06)", border: "1px solid rgba(196,152,42,0.25)", borderRadius: 14, textAlign: "center" }}>
-                <div style={{ fontFamily: SF, fontSize: 17, fontWeight: 700, marginBottom: 6 }}>Generation limit reached</div>
-                <div style={{ fontSize: 13, color: "#8B7355", marginBottom: 16, lineHeight: 1.5 }}>Upgrade to Pro for unlimited bingo cards.</div>
+              <div style={{ padding: 24, background: "rgba(196,152,42,0.06)", border: "1px solid rgba(196,152,42,0.25)", borderRadius: 14 }}>
+                <div style={{ fontFamily: SF, fontSize: 18, fontWeight: 800, marginBottom: 4, textAlign: "center" }}>Upgrade to Highway Bingo Pro</div>
+                <div style={{ fontSize: 13, color: "#8B7355", marginBottom: 20, textAlign: "center" }}>You&apos;ve used all 10 free generations this year.</div>
+                <div style={{ marginBottom: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+                  {[
+                    { icon: "♾️", label: "Unlimited generations", sub: "Every trip, all year long" },
+                    { icon: "🗂️", label: "Category filtering", sub: "Coming soon" },
+                    { icon: "📖", label: "Item descriptions & trivia", sub: "Coming soon" },
+                    { icon: "❤️", label: "Support an indie developer", sub: "Keep Highway Bingo free for everyone" },
+                  ].map(({ icon, label, sub }) => (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontSize: 20, width: 28, textAlign: "center", flexShrink: 0 }}>{icon}</span>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "#FFF9EE" }}>{label}</div>
+                        <div style={{ fontSize: 12, color: "#6B5C48" }}>{sub}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 <button onClick={startCheckout} style={B1(false)}>Upgrade to Pro — $5/year</button>
               </div>
             ) : (

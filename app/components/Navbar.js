@@ -104,6 +104,19 @@ export default function Navbar() {
           <NavLink href="/about" pathname={pathname}>About</NavLink>
         </div>
 
+        {/* Pro badge (desktop, paid users) */}
+        {tierLoaded && isPro && (
+          <div className="nav-cta" style={{
+            padding: "5px 12px", background: "rgba(106,176,46,0.15)",
+            border: "1px solid rgba(106,176,46,0.35)", borderRadius: 8,
+            color: "#6ab02e", fontSize: 12, fontWeight: 700, fontFamily: F,
+            letterSpacing: 0.5, marginRight: 8, flexShrink: 0,
+            display: "none", // shown via media query
+          }}>
+            ✦ Pro
+          </div>
+        )}
+
         {/* Upgrade to Pro link (desktop, free users only) */}
         {tierLoaded && !isPro && (
           <button onClick={startCheckout} className="nav-cta" style={{
