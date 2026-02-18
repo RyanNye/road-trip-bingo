@@ -1,19 +1,6 @@
 "use client";
 import { useEffect, useRef, useCallback } from "react";
-import { Loader } from "@googlemaps/js-api-loader";
-
-// Singleton loader — created once at module level to prevent double script injection
-let loaderInstance = null;
-function getLoader() {
-  if (!loaderInstance) {
-    loaderInstance = new Loader({
-      apiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY || "",
-      version: "weekly",
-      libraries: ["places"],
-    });
-  }
-  return loaderInstance;
-}
+import { getGoogleMapsLoader } from "@/app/lib/googleMapsLoader";
 
 const MAP_STYLES = [
   { elementType: "geometry", stylers: [{ color: "#f5f0e8" }] },
@@ -98,7 +85,7 @@ export default function RouteMap({ from, to, routeCoords, onWaypointsChange }) {
     let cancelled = false;
 
     const init = async () => {
-      const google = await getLoader().load();
+      const google = await getGoogleMapsLoader().load();
       if (cancelled) return;
 
       // Build initial bounds from Claude's routeCoords

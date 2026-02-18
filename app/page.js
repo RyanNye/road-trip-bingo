@@ -18,6 +18,11 @@ const RouteMap = dynamic(() => import("@/app/components/RouteMap"), {
   ),
 });
 
+const PlaceInput = dynamic(() => import("@/app/components/PlaceInput"), {
+  ssr: false,
+  loading: () => <input style={{ width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, color: "#FFF9EE", fontSize: 16, outline: "none", boxSizing: "border-box" }} />,
+});
+
 /*
   ROAD TRIP BINGO — Claude-Powered
   Supports any route via Claude API
@@ -649,19 +654,19 @@ export default function App() {
                 </div>
               </div>
             )}
-            <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><input style={IN} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Chicago, IL" /></div>
+            <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><PlaceInput style={IN} value={from} onChange={setFrom} placeholder="Chicago, IL" onKeyDown={(e) => e.key === "Enter" && from.trim() && to.trim() && planRoute()} /></div>
             <div style={{ textAlign: "center", margin: "4px 0", color: "#6B5C48", fontSize: 20 }}>↓</div>
-            <div style={{ marginBottom: 28 }}><label style={L}>Destination</label><input style={IN} value={to} onChange={(e) => setTo(e.target.value)} placeholder="Santa Monica, CA" /></div>
+            <div style={{ marginBottom: 28 }}><label style={L}>Destination</label><PlaceInput style={IN} value={to} onChange={setTo} placeholder="Santa Monica, CA" onKeyDown={(e) => e.key === "Enter" && from.trim() && to.trim() && planRoute()} /></div>
             <div style={{ marginBottom: 32 }}>
               <label style={L}>How many cards?</label>
               <input type="text" inputMode="numeric" style={IN}
                 value={numCardsStr} onChange={(e) => setNumCardsStr(e.target.value)} placeholder="1-20" />
             </div>
-            <button onClick={planRoute} disabled={!from.trim() || !to.trim()} style={B1(!from.trim() || !to.trim())}>Plan My Route</button>
+            <button onClick={() => planRoute()} disabled={!from.trim() || !to.trim()} style={B1(!from.trim() || !to.trim())}>Plan My Route</button>
             {routeError && (
               <div style={{ marginTop: 16, padding: 16, background: "rgba(224,107,143,0.08)", border: "1px solid rgba(224,107,143,0.2)", borderRadius: 10, color: "#E06B8F", fontSize: 14 }}>
                 Could not analyze this route. Check your city names and try again.
-                <button onClick={planRoute} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
+                <button onClick={() => planRoute()} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
               </div>
             )}
             <div style={{ marginTop: 24, padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
