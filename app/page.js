@@ -412,11 +412,9 @@ export default function App() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              route_name: routeData.route_name,
-              route_summary: routeData.route_summary,
-              major_waypoints: legWaypoints,
               from: leg.from,
               to: leg.to,
+              leg_mode: true,
             }),
           }).then((r) => r.json()).catch(() => null);
 
