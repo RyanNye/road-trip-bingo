@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import * as Flags from 'country-flag-icons/react/3x2';
 
 /*
   ROAD TRIP BINGO — Claude-Powered
@@ -22,43 +21,6 @@ const IN = { width: "100%", padding: "14px 16px", background: "rgba(255,255,255,
 const B1 = (off) => ({ width: "100%", padding: 16, background: off ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg,#8B6914,#C4982A 50%,#8B6914)", border: "none", borderRadius: 12, color: off ? "#6B5C48" : "#FFF", fontSize: 16, fontWeight: 700, fontFamily: F, cursor: off ? "not-allowed" : "pointer", textTransform: "uppercase", letterSpacing: 2, boxShadow: off ? "none" : "0 4px 16px rgba(196,152,42,0.3)" });
 const B2 = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 16px", color: "#A89270", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F };
 const BOX = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: 20, marginBottom: 16 };
-
-// ═══════════════════════════════════════════════════════════════
-// FLAG LOOKUP
-// ═══════════════════════════════════════════════════════════════
-
-const US_STATES = new Set(["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"]);
-const CA_PROVINCES = new Set(["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"]);
-const COUNTRY_LOOKUP = {
-  "united states": "US", "usa": "US", "canada": "CA", "mexico": "MX",
-  "united kingdom": "GB", "uk": "GB", "great britain": "GB", "england": "GB", "scotland": "GB", "wales": "GB",
-  "france": "FR", "germany": "DE", "italy": "IT", "spain": "ES", "portugal": "PT",
-  "australia": "AU", "new zealand": "NZ", "japan": "JP", "china": "CN",
-  "india": "IN", "brazil": "BR", "argentina": "AR", "ireland": "IE",
-  "netherlands": "NL", "belgium": "BE", "switzerland": "CH",
-  "sweden": "SE", "norway": "NO", "denmark": "DK", "finland": "FI",
-  "poland": "PL", "austria": "AT", "greece": "GR", "turkey": "TR",
-  "south africa": "ZA", "kenya": "KE", "nigeria": "NG",
-  "thailand": "TH", "vietnam": "VN", "indonesia": "ID",
-  "philippines": "PH", "singapore": "SG", "malaysia": "MY",
-  "south korea": "KR", "ukraine": "UA", "russia": "RU",
-  "israel": "IL", "egypt": "EG", "morocco": "MA",
-};
-
-function getFlagCode(location) {
-  if (!location) return null;
-  const codeMatch = location.match(/,\s*([A-Za-z]{2})\s*$/);
-  if (codeMatch) {
-    const code = codeMatch[1].toUpperCase();
-    if (US_STATES.has(code)) return "US";
-    if (CA_PROVINCES.has(code)) return "CA";
-  }
-  const lower = location.toLowerCase();
-  for (const [name, code] of Object.entries(COUNTRY_LOOKUP)) {
-    if (lower.includes(name)) return code;
-  }
-  return null;
-}
 
 // ═══════════════════════════════════════════════════════════════
 // UTILITIES
@@ -137,6 +99,7 @@ const PRINT_CSS = `
   .print-header h2 { font-size: 26px; font-weight: 800; margin: 0; color: #222; line-height: 1.2; }
   .screen-only { display: none !important; }
   .print-banner { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  .fi { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
 @media screen {
   .print-only { display: none !important; }
@@ -265,15 +228,13 @@ function MissPanel({ onAdd }) {
 // FLAG COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
-function FlagSpan({ location }) {
-  const code = getFlagCode(location);
+function FlagSpan({ code }) {
   if (!code) return <div style={{ width: 44, height: 30, flexShrink: 0 }} />;
-  const FlagComponent = Flags[code];
-  if (!FlagComponent) return <div style={{ width: 44, height: 30, flexShrink: 0 }} />;
   return (
-    <div style={{ width: 44, height: 30, flexShrink: 0, borderRadius: 3, overflow: "hidden", border: "1px solid rgba(255,255,255,0.5)", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}>
-      <FlagComponent style={{ width: "100%", height: "100%", display: "block" }} />
-    </div>
+    <span
+      className={`fi fi-${code}`}
+      style={{ display: "inline-block", width: 44, height: 30, flexShrink: 0, backgroundSize: "cover", backgroundPosition: "center", borderRadius: 3, border: "1px solid rgba(255,255,255,0.5)", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}
+    />
   );
 }
 
@@ -622,13 +583,14 @@ export default function App() {
               <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
             </div>
 
-            {/* Card tabs + Print button */}
-            <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", maxWidth: 560, margin: "0 auto 16px", width: "100%", flexWrap: "wrap", gap: 8 }}>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                {cards.map((_, i) => (
-                  <button key={i} onClick={() => setActiveCard(i)} style={{ padding: "6px 16px", borderRadius: 100, border: `1px solid ${activeCard === i ? "#C4982A" : "rgba(255,255,255,0.12)"}`, background: activeCard === i ? "linear-gradient(135deg,#8B6914,#C4982A)" : "rgba(255,255,255,0.04)", color: activeCard === i ? "#FFF" : "#6B5C48", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Card {i + 1}</button>
-                ))}
-              </div>
+            {/* Card tabs — centered */}
+            <div className="no-print" style={{ maxWidth: 560, margin: "0 auto 4px", width: "100%", display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 6 }}>
+              {cards.map((_, i) => (
+                <button key={i} onClick={() => setActiveCard(i)} style={{ padding: "6px 16px", borderRadius: 100, border: `1px solid ${activeCard === i ? "#C4982A" : "rgba(255,255,255,0.12)"}`, background: activeCard === i ? "linear-gradient(135deg,#8B6914,#C4982A)" : "rgba(255,255,255,0.04)", color: activeCard === i ? "#FFF" : "#6B5C48", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Card {i + 1}</button>
+              ))}
+            </div>
+            {/* Print All — right aligned below tabs */}
+            <div className="no-print" style={{ maxWidth: 560, margin: "0 auto 16px", width: "100%", display: "flex", justifyContent: "flex-end" }}>
               <button onClick={handlePrint} style={{ ...B2, background: "rgba(196,152,42,0.08)", borderColor: "rgba(196,152,42,0.2)", color: "#C4982A", whiteSpace: "nowrap" }}>🖨️ Print All</button>
             </div>
 
@@ -673,11 +635,11 @@ export default function App() {
                     {/* Colored banner */}
                     <div className="print-banner" style={{ position: "relative", padding: "14px 20px", borderBottom: "2px solid #8B6914", background: "linear-gradient(135deg, #7A5514, #C4982A)", display: "flex", alignItems: "center", gap: 16 }}>
                       <div style={{ position: "absolute", inset: 5, border: "1px solid rgba(255,255,255,0.3)", borderRadius: 5, pointerEvents: "none" }} />
-                      <FlagSpan location={from} />
+                      <FlagSpan code={routeData?.origin_flag_code} />
                       <div style={{ flex: 1, textAlign: "center", fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, fontWeight: 800, color: "white", lineHeight: 1.25 }}>
                         {toTitleCase(from)} to {toTitleCase(to)} Highway Bingo!
                       </div>
-                      <FlagSpan location={to} />
+                      <FlagSpan code={routeData?.destination_flag_code} />
                     </div>
                     {/* Bingo grid */}
                     <div style={{ padding: 12, background: "white" }}>
