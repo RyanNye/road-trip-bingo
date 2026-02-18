@@ -124,9 +124,12 @@ function Cell({ item, size, free, marked, onClick }) {
       overflow: "hidden", position: "relative",
     }}>
       {free ? (
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontFamily: BF, fontWeight: 700, fontSize: size <= 3 ? 12 : 10, color: "#FFF", textTransform: "uppercase", lineHeight: 1.1 }}>{item?.name}</div>
-          <div style={{ fontSize: 8, color: "rgba(255,255,255,0.7)", marginTop: 2, textTransform: "uppercase", letterSpacing: 1 }}>FREE</div>
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <span style={{ position: "absolute", fontSize: 52, color: "#FFD700", lineHeight: 1, pointerEvents: "none", userSelect: "none", filter: "drop-shadow(0 1px 4px rgba(0,0,0,0.35))" }}>★</span>
+          <div style={{ position: "relative", zIndex: 1, textAlign: "center" }}>
+            <div style={{ fontFamily: BF, fontWeight: 700, fontSize: size <= 3 ? 12 : 10, color: "#FFF", textTransform: "uppercase", lineHeight: 1.1, textShadow: "0 1px 3px rgba(0,0,0,0.6)" }}>{item?.name}</div>
+            <div style={{ fontSize: 8, color: "rgba(255,255,255,0.85)", marginTop: 2, textTransform: "uppercase", letterSpacing: 1, textShadow: "0 1px 2px rgba(0,0,0,0.5)" }}>FREE</div>
+          </div>
         </div>
       ) : (
         <div style={{ fontFamily: BF, fontWeight: 600, fontSize: ns, color: marked ? "#c8e6a0" : "#3D2E1C", textAlign: "center", lineHeight: 1.15, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: size >= 5 ? 2 : 3, WebkitBoxOrient: "vertical" }}>{item?.name}</div>
@@ -610,9 +613,9 @@ export default function App() {
             )}
 
             {/* Bottom buttons */}
-            <div className="no-print" style={{ maxWidth: 560, margin: "24px auto 0", width: "100%", display: "flex", gap: 12 }}>
+            <div className="no-print" style={{ maxWidth: 560, margin: "24px auto 0", width: "100%", display: "flex", justifyContent: "space-between", gap: 12 }}>
               <button onClick={reset} style={B2}>← New Route</button>
-              <button onClick={() => { setFb({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Leave a Review</button>
+              <button onClick={() => { setFb({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Make Corrections</button>
             </div>
 
             {/* Print output */}
@@ -651,10 +654,16 @@ export default function App() {
                               aspectRatio: "1", border: `1.5px solid ${isFree ? "#888" : "#ccc"}`, borderRadius: 5,
                               display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                               padding: 5, background: isFree ? "#f5ead0" : "white", textAlign: "center",
+                              position: "relative", overflow: "hidden",
                             }}>
-                              <div style={{ fontSize: 9, fontWeight: isFree ? 700 : 600, color: "#111", lineHeight: 1.2 }}>
-                                {isFree ? `${item.name} ★` : item.name}
-                              </div>
+                              {isFree ? (
+                                <>
+                                  <span style={{ position: "absolute", fontSize: 28, color: "#FFD700", lineHeight: 1, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>★</span>
+                                  <div style={{ position: "relative", zIndex: 1, fontSize: 9, fontWeight: 700, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
+                                </>
+                              ) : (
+                                <div style={{ fontSize: 9, fontWeight: 600, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
+                              )}
                             </div>
                           );
                         })}
