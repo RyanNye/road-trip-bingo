@@ -32,6 +32,7 @@ export async function POST(request) {
     const route = await findOrCreateRoute({ from, to, routeAnalysis: result });
     await logSearch({ from, to, routeId: route.id });
     console.log("[analyze-route] done, routeId:", route.id);
+    console.log("[analyze-route] estimated_hours:", result.estimated_hours, "| estimated_miles:", result.estimated_miles, "| suggested_legs count:", result.suggested_legs?.length ?? "field missing");
 
     return NextResponse.json({ ...result, _routeId: route.id });
   } catch (error) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 
 /*
   ROAD TRIP BINGO — Claude-Powered
@@ -242,6 +242,55 @@ function FlagSpan({ code }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PRINT CARD CELL (shared for single + multi-leg)
+// ═══════════════════════════════════════════════════════════════
+
+function PrintCell({ item, gridSize }) {
+  const isFree = item?._isFree;
+  return (
+    <div style={{
+      aspectRatio: "1", border: `1.5px solid ${isFree ? "#888" : "#ccc"}`, borderRadius: 5,
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      padding: 5, background: isFree ? "#f5ead0" : "white", textAlign: "center",
+      position: "relative", overflow: "hidden",
+    }}>
+      {isFree ? (
+        <>
+          <span style={{ position: "absolute", fontSize: 28, color: "#FFD700", lineHeight: 1, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>★</span>
+          <div style={{ position: "relative", zIndex: 1, fontSize: 18, fontWeight: 700, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
+        </>
+      ) : (
+        <div style={{ fontSize: 18, fontWeight: 600, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
+      )}
+    </div>
+  );
+}
+
+function PrintCardPage({ card, gridSize, fromLabel, toLabel, originFlagCode, destFlagCode }) {
+  const freeIdx = gridSize % 2 === 1 ? Math.floor((gridSize * gridSize) / 2) : -1;
+  const taggedCard = card.map((item, i) => i === freeIdx ? { ...item, _isFree: true } : item);
+  return (
+    <div className="print-page">
+      <div style={{ border: "3px solid #8B6914", borderRadius: 10, overflow: "hidden", width: "100%", background: "white" }}>
+        <div className="print-banner" style={{ position: "relative", padding: "14px 20px", borderBottom: "2px solid #8B6914", background: "linear-gradient(135deg, #7A5514, #C4982A)", display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ position: "absolute", inset: 5, border: "1px solid rgba(255,255,255,0.3)", borderRadius: 5, pointerEvents: "none" }} />
+          <FlagSpan code={originFlagCode} />
+          <div style={{ flex: 1, textAlign: "center", fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, fontWeight: 800, color: "white", lineHeight: 1.25 }}>
+            {toTitleCase(fromLabel)} to {toTitleCase(toLabel)} Highway Bingo!
+          </div>
+          <FlagSpan code={destFlagCode} />
+        </div>
+        <div style={{ padding: 12, background: "white" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${gridSize},1fr)`, gap: 4 }}>
+            {taggedCard.map((item, i) => <PrintCell key={i} item={item} gridSize={gridSize} />)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════
 
@@ -273,7 +322,38 @@ export default function App() {
   const [routeError, setRouteError] = useState(null);
   const [genError, setGenError] = useState(null);
 
+  const [fb, setFb] = useState({});
+  const [fbNotes, setFbNotes] = useState({});
+  const [fbDone, setFbDone] = useState(false);
+
+  // Multi-leg state
+  const [legChoice, setLegChoice] = useState(null); // null | "split" | "keep"
+  const [legs, setLegs] = useState([]); // [{label, from, to, originFlagCode, destFlagCode, cards, allItems, blurb}]
+  const [activeLeg, setActiveLeg] = useState(0);
+
   const freeItem = { name: "First Pit Stop", emoji: "🚻", desc: "", category: "free", tier: "free" };
+
+  const isLongRoute = routeData && (
+    (routeData.estimated_hours != null && routeData.estimated_hours > 5) ||
+    (routeData.estimated_miles != null && routeData.estimated_miles > 300)
+  );
+  if (routeData && phase === "route") {
+    console.log("[isLongRoute]", isLongRoute, {
+      estimated_hours: routeData.estimated_hours,
+      estimated_miles: routeData.estimated_miles,
+      hours_check: routeData.estimated_hours != null && routeData.estimated_hours > 5,
+      miles_check: routeData.estimated_miles != null && routeData.estimated_miles > 300,
+    });
+  }
+
+  // Derived active-leg data for the cards page
+  const activeCards = legs.length > 0 ? (legs[activeLeg]?.cards || []) : cards;
+  const activeAllItems = legs.length > 0 ? (legs[activeLeg]?.allItems || []) : allItems;
+  const activeBlurb = legs.length > 0 ? (legs[activeLeg]?.blurb || null) : blurb;
+  const activeFrom = legs.length > 0 ? (legs[activeLeg]?.from || from) : from;
+  const activeTo = legs.length > 0 ? (legs[activeLeg]?.to || to) : to;
+  const activeOriginFlag = legs.length > 0 ? legs[activeLeg]?.originFlagCode : routeData?.origin_flag_code;
+  const activeDestFlag = legs.length > 0 ? legs[activeLeg]?.destFlagCode : routeData?.destination_flag_code;
 
   useEffect(() => {
     const s = localStorage.getItem("rtb_last_session");
@@ -282,6 +362,7 @@ export default function App() {
 
   const planRoute = async () => {
     setRouteError(null);
+    setLegChoice(null);
     setPhase("loading");
     try {
       const res = await fetch("/api/analyze-route", {
@@ -291,6 +372,15 @@ export default function App() {
       });
       if (!res.ok) throw new Error("Route analysis failed");
       const data = await res.json();
+      console.log("[planRoute] routeData received:", {
+        estimated_hours: data.estimated_hours,
+        estimated_miles: data.estimated_miles,
+        suggested_legs: data.suggested_legs,
+        isLongRoute: (
+          (data.estimated_hours != null && data.estimated_hours > 5) ||
+          (data.estimated_miles != null && data.estimated_miles > 300)
+        ),
+      });
       setRouteData(data);
       setPhase("route");
     } catch (err) {
@@ -308,6 +398,15 @@ export default function App() {
   const generate = async () => {
     if (gensLeft <= 0) return;
     const numCards = Math.min(20, Math.max(1, parseInt(numCardsStr) || 4));
+    const isSplit = legChoice === "split" && routeData?.suggested_legs?.length > 1;
+    const legsToGenerate = isSplit ? routeData.suggested_legs : null;
+    const gensNeeded = isSplit ? legsToGenerate.length : 1;
+
+    if (gensLeft < gensNeeded) {
+      setGenError(`This route needs ${gensNeeded} generation${gensNeeded > 1 ? "s" : ""} (one per leg), but you only have ${gensLeft} left.`);
+      return;
+    }
+
     setGenError(null);
     setPhase("generating"); setProgress(0);
     const msgs = ["Checking community database...", "Scanning route corridor...", "Identifying landmarks...", "Balancing categories...", "Creating unique cards...", "Finalizing..."];
@@ -318,46 +417,115 @@ export default function App() {
     }, 400);
 
     try {
-      const res = await fetch("/api/generate-items", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          route_name: routeData?.route_name,
-          route_summary: routeData?.route_summary,
-          major_waypoints: routeData?.major_waypoints,
-          route_coordinates: routeData?.route_coordinates,
-          _routeId: routeData?._routeId,
-          from,
-          to,
-        }),
-      });
-      if (!res.ok) throw new Error("Item generation failed");
-      const data = await res.json();
+      if (isSplit) {
+        const generatedLegs = [];
+        for (const leg of legsToGenerate) {
+          const legWaypoints = (leg.waypoints || []).map((w) => ({ name: w, country: "" }));
 
-      clearInterval(progRef.current); setProgress(100); setLoadMsg("Done!");
-      const pool = [...customItems, ...(data.items || [])];
-      setAllItems(pool);
+          const itemsRes = await fetch("/api/generate-items", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              route_name: routeData.route_name,
+              route_summary: routeData.route_summary,
+              major_waypoints: legWaypoints,
+              route_coordinates: routeData.route_coordinates,
+              _routeId: routeData._routeId,
+              from: leg.from,
+              to: leg.to,
+            }),
+          });
+          if (!itemsRes.ok) throw new Error(`Item generation failed for: ${leg.label}`);
+          const itemsData = await itemsRes.json();
 
-      localStorage.setItem("rtb_last_session", JSON.stringify({
-        from, to, routeId: data._routeId, items: pool,
-      }));
+          const pool = [...customItems, ...(itemsData.items || [])];
+          const guaranteed = pool.filter((i) => i.tier === "custom" || i.tier === "legendary" || i.tier === "community_verified");
+          const built = [];
+          for (let i = 0; i < numCards; i++) built.push(buildCard(pool, guaranteed, gridSize, freeItem));
 
-      fetch("/api/generate-blurb", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          route_name: routeData?.route_name,
-          route_summary: routeData?.route_summary,
-          major_waypoints: routeData?.major_waypoints,
-          from, to,
-        }),
-      }).then((r) => r.json()).then((d) => setBlurb(d)).catch(() => {});
+          const legBlurb = await fetch("/api/generate-blurb", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              route_name: routeData.route_name,
+              route_summary: routeData.route_summary,
+              major_waypoints: legWaypoints,
+              from: leg.from,
+              to: leg.to,
+            }),
+          }).then((r) => r.json()).catch(() => null);
 
-      const guaranteed = pool.filter((i) => i.tier === "custom" || i.tier === "legendary" || i.tier === "community_verified");
-      const built = [];
-      for (let i = 0; i < numCards; i++) built.push(buildCard(pool, guaranteed, gridSize, freeItem));
-      setCards(built); setActiveCard(0); setGensLeft((p) => p - 1);
-      setTimeout(() => setPhase("cards"), 300);
+          generatedLegs.push({
+            label: leg.label,
+            from: leg.from,
+            to: leg.to,
+            originFlagCode: leg.origin_flag_code,
+            destFlagCode: leg.destination_flag_code,
+            cards: built,
+            allItems: pool,
+            blurb: legBlurb,
+          });
+        }
+
+        clearInterval(progRef.current); setProgress(100); setLoadMsg("Done!");
+        setLegs(generatedLegs);
+        setActiveLeg(0);
+        setCards([]);
+        setAllItems([]);
+        setBlurb(null);
+        setGensLeft((p) => p - gensNeeded);
+        setActiveCard(0);
+
+        localStorage.setItem("rtb_last_session", JSON.stringify({
+          from, to, routeId: routeData._routeId,
+          items: generatedLegs[0]?.allItems || [],
+        }));
+        setTimeout(() => setPhase("cards"), 300);
+
+      } else {
+        // Single leg
+        const res = await fetch("/api/generate-items", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            route_name: routeData?.route_name,
+            route_summary: routeData?.route_summary,
+            major_waypoints: routeData?.major_waypoints,
+            route_coordinates: routeData?.route_coordinates,
+            _routeId: routeData?._routeId,
+            from,
+            to,
+          }),
+        });
+        if (!res.ok) throw new Error("Item generation failed");
+        const data = await res.json();
+
+        clearInterval(progRef.current); setProgress(100); setLoadMsg("Done!");
+        const pool = [...customItems, ...(data.items || [])];
+        setAllItems(pool);
+        setLegs([]);
+
+        localStorage.setItem("rtb_last_session", JSON.stringify({
+          from, to, routeId: data._routeId, items: pool,
+        }));
+
+        fetch("/api/generate-blurb", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            route_name: routeData?.route_name,
+            route_summary: routeData?.route_summary,
+            major_waypoints: routeData?.major_waypoints,
+            from, to,
+          }),
+        }).then((r) => r.json()).then((d) => setBlurb(d)).catch(() => {});
+
+        const guaranteed = pool.filter((i) => i.tier === "custom" || i.tier === "legendary" || i.tier === "community_verified");
+        const built = [];
+        for (let i = 0; i < numCards; i++) built.push(buildCard(pool, guaranteed, gridSize, freeItem));
+        setCards(built); setActiveCard(0); setGensLeft((p) => p - 1);
+        setTimeout(() => setPhase("cards"), 300);
+      }
     } catch (err) {
       clearInterval(progRef.current);
       setGenError(err.message);
@@ -366,25 +534,35 @@ export default function App() {
   };
 
   const handleMissAdd = (newItem) => {
-    setAllItems((prev) => [...prev, newItem]);
-    setCards((prev) => {
-      const tierRank = { generic: 0, ai_generated: 1, listed: 2, community_verified: 3, legendary: 4, custom: 5, free: 6 };
-      const center = gridSize % 2 === 1 ? Math.floor((gridSize * gridSize) / 2) : -1;
-      // Find the least important item name appearing in any card
+    const tierRank = { generic: 0, ai_generated: 1, listed: 2, community_verified: 3, legendary: 4, custom: 5, free: 6 };
+    const center = gridSize % 2 === 1 ? Math.floor((gridSize * gridSize) / 2) : -1;
+
+    const replaceInCards = (prevCards) => {
       let target = null;
-      for (const card of prev) {
+      for (const card of prevCards) {
         for (let i = 0; i < card.length; i++) {
           const item = card[i];
           if (i === center || item.tier === "free" || item.tier === "custom") continue;
           if (!target || (tierRank[item.tier] ?? 1) < (tierRank[target.tier] ?? 1)) target = item;
         }
       }
-      if (!target) return prev;
-      // Replace every occurrence of that item name across all cards
-      return prev.map((card) =>
+      if (!target) return prevCards;
+      return prevCards.map((card) =>
         card.map((item, i) => (i !== center && item.name === target.name ? newItem : item))
       );
-    });
+    };
+
+    if (legs.length > 0) {
+      setLegs((prev) =>
+        prev.map((leg, i) => {
+          if (i !== activeLeg) return leg;
+          return { ...leg, allItems: [...leg.allItems, newItem], cards: replaceInCards(leg.cards) };
+        })
+      );
+    } else {
+      setAllItems((prev) => [...prev, newItem]);
+      setCards((prev) => replaceInCards(prev));
+    }
   };
 
   const handlePrint = () => window.print();
@@ -392,10 +570,30 @@ export default function App() {
   const reset = () => {
     setPhase("setup"); setCards([]); setAllItems([]); setCustomItems([]);
     setActiveCard(0); setWaypoints([]); setRouteData(null); setBlurb(null);
+    setLegs([]); setActiveLeg(0); setLegChoice(null); setFbNotes({});
   };
 
-  const [fb, setFb] = useState({});
-  const [fbDone, setFbDone] = useState(false);
+  const handleSubmitFeedback = async () => {
+    const items = Object.entries(fb)
+      .filter(([, response]) => response)
+      .map(([name, response]) => ({ name, response, note: fbNotes[name] || null }));
+
+    const routeId = routeData?._routeId || returnBanner?.routeId || null;
+
+    try {
+      await fetch("/api/submit-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ routeId, items }),
+      });
+    } catch (e) {
+      console.error("Feedback submit failed:", e);
+    }
+
+    localStorage.removeItem("rtb_last_session");
+    setReturnBanner(null);
+    setFbDone(true);
+  };
 
   return (
     <div style={{ minHeight: "100vh", background: "linear-gradient(165deg,#2C1810,#4A3728 40%,#3D2E1C)", fontFamily: F, color: "#FFF9EE" }}>
@@ -418,7 +616,7 @@ export default function App() {
               <div style={{ marginBottom: 20, padding: 16, background: "rgba(196,152,42,0.08)", border: "1px solid rgba(196,152,42,0.2)", borderRadius: 12 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#C4982A", marginBottom: 8 }}>Welcome back! How was your {returnBanner.from} → {returnBanner.to} trip?</div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => { setAllItems(returnBanner.items); setFrom(returnBanner.from); setTo(returnBanner.to); setFb({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Leave Feedback</button>
+                  <button onClick={() => { setAllItems(returnBanner.items); setFrom(returnBanner.from); setTo(returnBanner.to); setFb({}); setFbNotes({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Leave Feedback</button>
                   <button onClick={() => { localStorage.removeItem("rtb_last_session"); setReturnBanner(null); }} style={B2}>Dismiss</button>
                 </div>
               </div>
@@ -504,9 +702,46 @@ export default function App() {
                 <div key={i} style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.5, padding: "6px 0", borderBottom: i < routeData?.notable_highway_landmarks.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>{lm}</div>
               ))}
             </div>
+
+            {/* Long trip prompt */}
+            {isLongRoute && (
+              <div style={{ ...BOX, background: "rgba(196,152,42,0.06)", borderColor: "rgba(196,152,42,0.2)" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#C4982A", marginBottom: 6 }}>🗺️ This is a long trip!</div>
+                <div style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.6, marginBottom: 12 }}>
+                  About{routeData.estimated_hours != null ? ` ${Math.round(routeData.estimated_hours)} hrs` : ""}
+                  {routeData.estimated_miles != null ? ` / ${Math.round(routeData.estimated_miles)} mi` : ""} of driving.
+                  Want separate bingo cards and route guides for each stretch?
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setLegChoice("split")} style={{
+                    flex: 1, padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F,
+                    background: legChoice === "split" ? "rgba(196,152,42,0.2)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${legChoice === "split" ? "rgba(196,152,42,0.5)" : "rgba(255,255,255,0.12)"}`,
+                    color: legChoice === "split" ? "#C4982A" : "#A89270",
+                  }}>
+                    ✓ Yes, split into legs{routeData.suggested_legs?.length > 1 ? ` (${routeData.suggested_legs.length} × 1 gen)` : ""}
+                  </button>
+                  <button onClick={() => setLegChoice("keep")} style={{
+                    flex: 1, padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F,
+                    background: legChoice === "keep" ? "rgba(196,152,42,0.2)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${legChoice === "keep" ? "rgba(196,152,42,0.5)" : "rgba(255,255,255,0.12)"}`,
+                    color: legChoice === "keep" ? "#C4982A" : "#A89270",
+                  }}>
+                    No, one set of cards
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div style={{ display: "flex", gap: 12 }}>
               <button onClick={reset} style={{ ...B2, flex: 1, padding: 14 }}>← Back</button>
-              <button onClick={() => setPhase("custom")} style={{ ...B1(false), flex: 2 }}>Looks Good — Next →</button>
+              <button
+                onClick={() => setPhase("custom")}
+                disabled={isLongRoute && !legChoice}
+                style={{ ...B1(isLongRoute && !legChoice), flex: 2 }}
+              >
+                Looks Good — Next →
+              </button>
             </div>
           </div>
         )}
@@ -540,7 +775,7 @@ export default function App() {
             </div>
             {genError && (
               <div style={{ marginBottom: 16, padding: 16, background: "rgba(224,107,143,0.08)", border: "1px solid rgba(224,107,143,0.2)", borderRadius: 10, color: "#E06B8F", fontSize: 14 }}>
-                Could not generate cards. Please try again.
+                {genError}
                 <button onClick={generate} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
               </div>
             )}
@@ -573,22 +808,37 @@ export default function App() {
         {/* ─── CARDS ─── */}
         {phase === "cards" && (
           <div style={{ padding: 24 }}>
+            {/* Leg tabs (multi-leg only) */}
+            {legs.length > 0 && (
+              <div className="no-print" style={{ maxWidth: 560, margin: "0 auto 16px", width: "100%", display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
+                {legs.map((leg, i) => (
+                  <button key={i} onClick={() => { setActiveLeg(i); setActiveCard(0); }} style={{
+                    padding: "8px 16px", borderRadius: 100, border: `1px solid ${activeLeg === i ? "#C4982A" : "rgba(255,255,255,0.12)"}`,
+                    background: activeLeg === i ? "linear-gradient(135deg,#8B6914,#C4982A)" : "rgba(255,255,255,0.04)",
+                    color: activeLeg === i ? "#FFF" : "#6B5C48", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F,
+                  }}>
+                    {leg.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* Large route banner */}
             <div className="no-print" style={{ textAlign: "center", maxWidth: 560, margin: "0 auto 20px", width: "100%" }}>
               <div style={{ fontFamily: SF, fontSize: "clamp(24px,5vw,36px)", fontWeight: 900, lineHeight: 1.2, paddingBottom: "0.1em", background: "linear-gradient(180deg,#FFF9EE,#D4C5A9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", display: "inline-block" }}>
-                {from.split(",")[0].trim()} to {to.split(",")[0].trim()}
+                {activeFrom.split(",")[0].trim()} to {activeTo.split(",")[0].trim()}
               </div>
               <div style={{ fontSize: 15, color: "#C4982A", fontWeight: 600, marginTop: 4 }}>Route Summary</div>
             </div>
 
             {/* Active bingo card */}
             <div className="screen-only" style={{ display: "flex", justifyContent: "center", width: "100%", boxSizing: "border-box", marginBottom: 16 }}>
-              <BingoCard card={cards[activeCard]} size={gridSize} idx={activeCard} total={cards.length} key={`card-${activeCard}`} />
+              <BingoCard card={activeCards[activeCard]} size={gridSize} idx={activeCard} total={activeCards.length} key={`card-${activeLeg}-${activeCard}`} />
             </div>
 
             {/* Card tabs — centered */}
             <div className="no-print" style={{ maxWidth: 560, margin: "0 auto 4px", width: "100%", display: "flex", justifyContent: "center", flexWrap: "wrap", gap: 6 }}>
-              {cards.map((_, i) => (
+              {activeCards.map((_, i) => (
                 <button key={i} onClick={() => setActiveCard(i)} style={{ padding: "6px 16px", borderRadius: 100, border: `1px solid ${activeCard === i ? "#C4982A" : "rgba(255,255,255,0.12)"}`, background: activeCard === i ? "linear-gradient(135deg,#8B6914,#C4982A)" : "rgba(255,255,255,0.04)", color: activeCard === i ? "#FFF" : "#6B5C48", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Card {i + 1}</button>
               ))}
             </div>
@@ -601,9 +851,9 @@ export default function App() {
             <div className="no-print"><MissPanel onAdd={handleMissAdd} /></div>
 
             {/* Blurb */}
-            {blurb?.blurbs?.length > 0 && (
+            {activeBlurb?.blurbs?.length > 0 && (
               <div className="no-print" style={{ maxWidth: 560, margin: "16px auto 0" }}>
-                {blurb.blurbs.map((b, i) => (
+                {activeBlurb.blurbs.map((b, i) => (
                   <div key={i} style={{ ...BOX, marginBottom: 12 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#C4982A", textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>{b.leg}</div>
                     <div style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.6 }}>{b.description}</div>
@@ -615,63 +865,74 @@ export default function App() {
             {/* Bottom buttons */}
             <div className="no-print" style={{ maxWidth: 560, margin: "24px auto 0", width: "100%", display: "flex", justifyContent: "space-between", gap: 12 }}>
               <button onClick={reset} style={B2}>← New Route</button>
-              <button onClick={() => { setFb({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Make Corrections</button>
+              <button onClick={() => {
+                const fbItems = legs.length > 0 ? legs.flatMap((l) => l.allItems) : allItems;
+                setAllItems(fbItems);
+                setFb({}); setFbNotes({}); setFbDone(false); setPhase("feedback");
+              }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Make Corrections</button>
             </div>
 
             {/* Print output */}
             <div className="print-only">
-              {blurb?.blurbs?.length > 0 && (
-                <div className="print-page" style={{ padding: "0.5in", alignItems: "flex-start", justifyContent: "flex-start" }}>
-                  <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>Route Guide</div>
-                  <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{from} → {to}</div>
-                  {blurb.blurbs.map((b, i) => (
-                    <div key={i} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: i < blurb.blurbs.length - 1 ? "1px solid #ddd" : "none" }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#8B6914", marginBottom: 6 }}>{b.leg}</div>
-                      <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7 }}>{b.description}</div>
+              {legs.length > 0 ? (
+                // Multi-leg print
+                legs.map((leg, li) => (
+                  <React.Fragment key={li}>
+                    {/* Divider page between legs */}
+                    {li > 0 && (
+                      <div className="print-page" style={{ alignItems: "center", justifyContent: "center" }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 3, color: "#8B6914", marginBottom: 12 }}>Leg {li + 1}</div>
+                          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 800, color: "#222" }}>{leg.label}</div>
+                          <div style={{ fontSize: 14, color: "#666", marginTop: 8 }}>{leg.from} → {leg.to}</div>
+                        </div>
+                      </div>
+                    )}
+                    {/* Leg blurb page */}
+                    {leg.blurb?.blurbs?.length > 0 && (
+                      <div className="print-page" style={{ padding: "0.5in", alignItems: "flex-start", justifyContent: "flex-start" }}>
+                        <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>
+                          Route Guide — {leg.label}
+                        </div>
+                        <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{leg.from} → {leg.to}</div>
+                        {leg.blurb.blurbs.map((b, i) => (
+                          <div key={i} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: i < leg.blurb.blurbs.length - 1 ? "1px solid #ddd" : "none" }}>
+                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#8B6914", marginBottom: 6 }}>{b.leg}</div>
+                            <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7 }}>{b.description}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Leg cards */}
+                    {leg.cards.map((card, ci) => (
+                      <PrintCardPage key={ci} card={card} gridSize={gridSize}
+                        fromLabel={leg.from} toLabel={leg.to}
+                        originFlagCode={leg.originFlagCode} destFlagCode={leg.destFlagCode} />
+                    ))}
+                  </React.Fragment>
+                ))
+              ) : (
+                // Single leg print
+                <>
+                  {blurb?.blurbs?.length > 0 && (
+                    <div className="print-page" style={{ padding: "0.5in", alignItems: "flex-start", justifyContent: "flex-start" }}>
+                      <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>Route Guide</div>
+                      <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{from} → {to}</div>
+                      {blurb.blurbs.map((b, i) => (
+                        <div key={i} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: i < blurb.blurbs.length - 1 ? "1px solid #ddd" : "none" }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#8B6914", marginBottom: 6 }}>{b.leg}</div>
+                          <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7 }}>{b.description}</div>
+                        </div>
+                      ))}
                     </div>
+                  )}
+                  {cards.map((card, ci) => (
+                    <PrintCardPage key={ci} card={card} gridSize={gridSize}
+                      fromLabel={from} toLabel={to}
+                      originFlagCode={routeData?.origin_flag_code} destFlagCode={routeData?.destination_flag_code} />
                   ))}
-                </div>
+                </>
               )}
-              {cards.map((card, ci) => (
-                <div key={ci} className="print-page">
-                  <div style={{ border: "3px solid #8B6914", borderRadius: 10, overflow: "hidden", width: "100%", background: "white" }}>
-                    {/* Colored banner */}
-                    <div className="print-banner" style={{ position: "relative", padding: "14px 20px", borderBottom: "2px solid #8B6914", background: "linear-gradient(135deg, #7A5514, #C4982A)", display: "flex", alignItems: "center", gap: 16 }}>
-                      <div style={{ position: "absolute", inset: 5, border: "1px solid rgba(255,255,255,0.3)", borderRadius: 5, pointerEvents: "none" }} />
-                      <FlagSpan code={routeData?.origin_flag_code} />
-                      <div style={{ flex: 1, textAlign: "center", fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, fontWeight: 800, color: "white", lineHeight: 1.25 }}>
-                        {toTitleCase(from)} to {toTitleCase(to)} Highway Bingo!
-                      </div>
-                      <FlagSpan code={routeData?.destination_flag_code} />
-                    </div>
-                    {/* Bingo grid */}
-                    <div style={{ padding: 12, background: "white" }}>
-                      <div style={{ display: "grid", gridTemplateColumns: `repeat(${gridSize},1fr)`, gap: 4 }}>
-                        {card.map((item, i) => {
-                          const isFree = gridSize % 2 === 1 && i === Math.floor((gridSize * gridSize) / 2);
-                          return (
-                            <div key={i} style={{
-                              aspectRatio: "1", border: `1.5px solid ${isFree ? "#888" : "#ccc"}`, borderRadius: 5,
-                              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                              padding: 5, background: isFree ? "#f5ead0" : "white", textAlign: "center",
-                              position: "relative", overflow: "hidden",
-                            }}>
-                              {isFree ? (
-                                <>
-                                  <span style={{ position: "absolute", fontSize: 28, color: "#FFD700", lineHeight: 1, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>★</span>
-                                  <div style={{ position: "relative", zIndex: 1, fontSize: 9, fontWeight: 700, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
-                                </>
-                              ) : (
-                                <div style={{ fontSize: 9, fontWeight: 600, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
             </div>
           </div>
         )}
@@ -694,18 +955,30 @@ export default function App() {
             ) : (
               <>
                 {allItems.filter((i) => i.tier !== "custom" && i.tier !== "free").slice(0, 16).map((item, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                    <span style={{ fontSize: 18, width: 28, textAlign: "center" }}>{item.emoji}</span>
-                    <div style={{ flex: 1, fontSize: 14 }}>{item.name}</div>
-                    {[{ t: "spotted", icon: "👁️" }, { t: "missed", icon: "❌" }, { t: "confusing", icon: "❓" }].map(({ t, icon }) => (
-                      <button key={t} onClick={() => setFb((p) => ({ ...p, [item.name]: p[item.name] === t ? null : t }))}
-                        style={{ width: 34, height: 34, background: fb[item.name] === t ? "rgba(196,152,42,0.2)" : "rgba(255,255,255,0.04)", border: `1px solid ${fb[item.name] === t ? "rgba(196,152,42,0.4)" : "rgba(255,255,255,0.08)"}`, borderRadius: 8, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        {icon}
-                      </button>
-                    ))}
+                  <div key={i} style={{ padding: "10px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 18, width: 28, textAlign: "center" }}>{item.emoji}</span>
+                      <div style={{ flex: 1, fontSize: 14 }}>{item.name}</div>
+                      {[{ t: "spotted", icon: "👁️" }, { t: "missed", icon: "❌" }, { t: "confusing", icon: "❓" }].map(({ t, icon }) => (
+                        <button key={t} onClick={() => setFb((p) => ({ ...p, [item.name]: p[item.name] === t ? null : t }))}
+                          style={{ width: 34, height: 34, background: fb[item.name] === t ? "rgba(196,152,42,0.2)" : "rgba(255,255,255,0.04)", border: `1px solid ${fb[item.name] === t ? "rgba(196,152,42,0.4)" : "rgba(255,255,255,0.08)"}`, borderRadius: 8, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {icon}
+                        </button>
+                      ))}
+                    </div>
+                    {fb[item.name] === "confusing" && (
+                      <div style={{ marginTop: 8, paddingLeft: 38 }}>
+                        <input
+                          style={{ ...IN, padding: "6px 10px", fontSize: 13 }}
+                          placeholder="What was confusing? (optional)"
+                          value={fbNotes[item.name] || ""}
+                          onChange={(e) => setFbNotes((p) => ({ ...p, [item.name]: e.target.value }))}
+                        />
+                      </div>
+                    )}
                   </div>
                 ))}
-                <button onClick={() => { localStorage.removeItem("rtb_last_session"); setReturnBanner(null); setFbDone(true); }} style={{ ...B1(false), marginTop: 24 }}>Submit Feedback</button>
+                <button onClick={handleSubmitFeedback} style={{ ...B1(false), marginTop: 24 }}>Submit Feedback</button>
                 <div style={{ textAlign: "center", marginTop: 12 }}>
                   <button onClick={() => setPhase("cards")} style={{ background: "none", border: "none", color: "#6B5C48", cursor: "pointer", fontSize: 13 }}>← Back to cards</button>
                 </div>
