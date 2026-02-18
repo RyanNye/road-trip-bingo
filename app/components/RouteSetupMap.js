@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import PlaceInput from "@/app/components/PlaceInput";
 import { getGoogleMapsLoader } from "@/app/lib/googleMapsLoader";
 
@@ -63,7 +63,132 @@ function extractCountryCode(address) {
   return null;
 }
 
-function buildRouteData(result, from, to, detours) {
+// ── Helpers for async leg computation ────────────────────────────
+
+// Reverse-geocode a lat/lng → "City, State" string or null
+async function reverseGeocode(geocoder, latLng) {
+  return new Promise((resolve) => {
+    geocoder.geocode({ location: latLng }, (results, status) => {
+      if (status !== "OK" || !results?.length) { resolve(null); return; }
+      for (const type of ["locality", "administrative_area_level_2", "administrative_area_level_1"]) {
+        const r = results.find((r) => r.types.includes(type));
+        if (r) { resolve(r.formatted_address); return; }
+      }
+      resolve(results[0].formatted_address);
+    });
+  });
+}
+
+// Sample overview_path at a fractional position (0–1) along the route
+function coordAtFrac(routeCoords, frac) {
+  const idx = Math.round(frac * (routeCoords.length - 1));
+  return routeCoords[Math.min(Math.max(idx, 0), routeCoords.length - 1)];
+}
+
+const TARGET_LEG_SECONDS = 4 * 3600; // aim for ~4-hour legs
+
+/**
+ * Compute suggested legs for a long route.
+ *
+ * Rules:
+ *  - Checked detours ("waypoints") are mandatory leg boundaries.
+ *  - Unchecked detours only affect Google routing; the system ignores them
+ *    when deciding where to split legs.
+ *  - Any segment longer than TARGET_LEG_SECONDS is automatically subdivided
+ *    using reverse-geocoded points sampled from the overview_path.
+ */
+async function computeSuggestedLegs(
+  google, from, to, detours, detourWaypoints, googleLegs, routeCoords, totalSeconds
+) {
+  const validDetours = detours.filter(Boolean);
+
+  // Cumulative drive time at each Google-leg boundary
+  // googleLegs[i] ends at: detours[i] (if exists), otherwise `to`
+  const cumTimes = [];
+  let cum = 0;
+  for (const leg of googleLegs) {
+    cum += leg.duration.value;
+    cumTimes.push(cum);
+  }
+
+  // All user-defined points with cumulative time and mandatory flag
+  const userPoints = [
+    {
+      time: 0,
+      label: from,
+      mandatory: true,
+      flagCode: extractCountryCode(googleLegs[0].start_address) || "us",
+    },
+  ];
+  validDetours.forEach((d, i) => {
+    userPoints.push({
+      time: cumTimes[i],
+      label: d,
+      mandatory: !!detourWaypoints[i],
+      flagCode: extractCountryCode(d) || "us",
+    });
+  });
+  userPoints.push({
+    time: totalSeconds,
+    label: to,
+    mandatory: true,
+    flagCode: extractCountryCode(googleLegs[googleLegs.length - 1].end_address) || "us",
+  });
+
+  // Only mandatory points become leg boundaries
+  const mandatory = userPoints.filter((p) => p.mandatory);
+
+  const geocoder = new google.maps.Geocoder();
+  const finalBoundaries = [];
+
+  for (let i = 0; i < mandatory.length; i++) {
+    finalBoundaries.push(mandatory[i]);
+
+    if (i < mandatory.length - 1) {
+      const segStart = mandatory[i];
+      const segEnd = mandatory[i + 1];
+      const segDuration = segEnd.time - segStart.time;
+
+      if (segDuration > TARGET_LEG_SECONDS) {
+        const numLegs = Math.ceil(segDuration / TARGET_LEG_SECONDS);
+        // Add (numLegs - 1) intermediate break points
+        for (let k = 1; k < numLegs; k++) {
+          const targetTime = segStart.time + (segDuration * k) / numLegs;
+          const frac = totalSeconds > 0 ? targetTime / totalSeconds : 0;
+          const coord = coordAtFrac(routeCoords, frac);
+          const cityName = await reverseGeocode(geocoder, coord);
+          if (cityName) {
+            finalBoundaries.push({
+              time: targetTime,
+              label: cityName,
+              mandatory: false,
+              flagCode: extractCountryCode(cityName) || "us",
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Sort by time in case async geocodes arrived out of order
+  finalBoundaries.sort((a, b) => a.time - b.time);
+
+  if (finalBoundaries.length < 2) return null;
+
+  return finalBoundaries.slice(0, -1).map((start, i) => {
+    const end = finalBoundaries[i + 1];
+    return {
+      label: `Leg ${i + 1}: ${start.label.split(",")[0].trim()} → ${end.label.split(",")[0].trim()}`,
+      from: start.label,
+      to: end.label,
+      origin_flag_code: start.flagCode,
+      destination_flag_code: end.flagCode,
+      waypoints: [],
+    };
+  });
+}
+
+async function buildRouteData(result, google, from, to, detours, detourWaypoints) {
   const route = result.routes?.[0];
   if (!route) return null;
 
@@ -87,8 +212,8 @@ function buildRouteData(result, from, to, detours) {
     `${from} to ${to}${viaText}. ` +
     `Approximately ${estimatedMiles} miles (${estimatedHours} hrs driving).`;
 
-  // Major waypoints from user-entered detours
-  const majorWaypoints = validDetours.map((d) => {
+  // Include isWaypoint so the backend knows which stops are mandatory boundaries
+  const majorWaypoints = validDetours.map((d, i) => {
     const parts = d.split(",").map((s) => s.trim());
     const name = parts
       .slice(0, 2)
@@ -96,25 +221,23 @@ function buildRouteData(result, from, to, detours) {
       .replace(/\s*\d{5}(-\d{4})?\s*/g, "")
       .trim();
     const country = (extractCountryCode(d) || "us").toUpperCase();
-    return { name, country };
+    return { name, country, isWaypoint: !!detourWaypoints[i] };
   });
 
   const originFlag = extractCountryCode(legs[0].start_address) || "us";
   const destFlag = extractCountryCode(legs[legs.length - 1].end_address) || "us";
 
-  // Suggested legs — only when route is long AND the user added detour stops
+  // Auto-split any long route — regardless of whether detours were added
   const isLong = estimatedMiles > 300 || estimatedHours > 5;
   let suggestedLegs = null;
-  if (isLong && validDetours.length > 0) {
-    const points = [from, ...validDetours, to];
-    suggestedLegs = points.slice(0, -1).map((start, i) => ({
-      label: `Leg ${i + 1}: ${start.split(",")[0].trim()} → ${points[i + 1].split(",")[0].trim()}`,
-      from: start,
-      to: points[i + 1],
-      origin_flag_code: extractCountryCode(start) || "us",
-      destination_flag_code: extractCountryCode(points[i + 1]) || "us",
-      waypoints: [],
-    }));
+  if (isLong) {
+    try {
+      suggestedLegs = await computeSuggestedLegs(
+        google, from, to, detours, detourWaypoints, legs, routeCoords, totalSeconds
+      );
+    } catch (e) {
+      console.error("[buildRouteData] computeSuggestedLegs error:", e);
+    }
   }
 
   return {
@@ -152,14 +275,27 @@ export default function RouteSetupMap({
   const serviceRef = useRef(null);
   const rendererRef = useRef(null);
   const debounceRef = useRef(null);
+  const lastResultRef = useRef(null);    // cache last Directions result
+  const buildIdRef = useRef(0);          // guards against stale async completions
 
-  // Refs so the directions_changed listener always reads current values
+  // Refs so async callbacks always read current values
   const fromRef = useRef(from);
   const toRef = useRef(to);
   const detoursRef = useRef(detours);
+  const detourWaypointsRef = useRef([]);
+
   useEffect(() => { fromRef.current = from; }, [from]);
   useEffect(() => { toRef.current = to; }, [to]);
   useEffect(() => { detoursRef.current = detours; }, [detours]);
+
+  // detourWaypoints mirrors detours — same length, managed locally
+  const [detourWaypoints, setDetourWaypoints] = useState([]);
+  useEffect(() => { detourWaypointsRef.current = detourWaypoints; }, [detourWaypoints]);
+
+  // Reset waypoints when parent clears detours (e.g. reset())
+  useEffect(() => {
+    if (detours.length === 0) setDetourWaypoints([]);
+  }, [detours.length]);
 
   // ── Initialize map once ───────────────────────────────────────
   useEffect(() => {
@@ -197,13 +333,19 @@ export default function RouteSetupMap({
         if (cancelled) return;
         const result = renderer.getDirections();
         if (!result) return;
-        const data = buildRouteData(
+        lastResultRef.current = result;
+
+        const myId = ++buildIdRef.current;
+        buildRouteData(
           result,
+          googleRef.current,
           fromRef.current,
           toRef.current,
-          detoursRef.current
-        );
-        onRouteChange(data);
+          detoursRef.current,
+          detourWaypointsRef.current
+        )
+          .then((data) => { if (!cancelled && buildIdRef.current === myId) onRouteChange(data); })
+          .catch((e) => console.error("[RouteSetupMap] buildRouteData error:", e));
       });
     })().catch((e) => { if (!cancelled) console.error("[RouteSetupMap]", e); });
 
@@ -217,10 +359,9 @@ export default function RouteSetupMap({
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Re-request directions when inputs change ──────────────────
+  // ── Re-request directions when from/to/detours change ────────
   useEffect(() => {
     if (!from || !to) {
-      // Clear route display when inputs are incomplete
       try { if (rendererRef.current) rendererRef.current.setDirections({ routes: [] }); } catch (_) {}
       onRouteChange(null);
       return;
@@ -242,7 +383,7 @@ export default function RouteSetupMap({
           (result, status) => {
             if (status === "OK" && rendererRef.current) {
               rendererRef.current.setDirections(result);
-              // directions_changed fires → calls onRouteChange
+              // directions_changed fires → triggers buildRouteData
             } else {
               onRouteChange(null);
             }
@@ -255,9 +396,33 @@ export default function RouteSetupMap({
     }, 500);
   }, [from, to, detours]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const addDetour = () => setDetours((p) => [...p, ""]);
-  const removeDetour = (i) => setDetours((p) => p.filter((_, j) => j !== i));
+  // ── Rebuild leg structure when waypoints change (no re-fetch) ─
+  useEffect(() => {
+    if (!lastResultRef.current || !googleRef.current) return;
+    const myId = ++buildIdRef.current;
+    buildRouteData(
+      lastResultRef.current,
+      googleRef.current,
+      fromRef.current,
+      toRef.current,
+      detoursRef.current,
+      detourWaypoints
+    )
+      .then((data) => { if (buildIdRef.current === myId) onRouteChange(data); })
+      .catch((e) => console.error("[RouteSetupMap] waypoint rebuild error:", e));
+  }, [detourWaypoints]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Detour list helpers ───────────────────────────────────────
+  const addDetour = () => {
+    setDetours((p) => [...p, ""]);
+    setDetourWaypoints((p) => [...p, false]);
+  };
+  const removeDetour = (i) => {
+    setDetours((p) => p.filter((_, j) => j !== i));
+    setDetourWaypoints((p) => p.filter((_, j) => j !== i));
+  };
   const updateDetour = (i, val) => setDetours((p) => p.map((d, j) => (j === i ? val : d)));
+  const toggleWaypoint = (i) => setDetourWaypoints((p) => p.map((w, j) => (j === i ? !w : w)));
 
   return (
     <div>
@@ -283,6 +448,22 @@ export default function RouteSetupMap({
               placeholder={`Detour stop ${i + 1}`}
               style={{ ...IN, flex: 1 }}
             />
+            {/* Waypoint checkbox */}
+            <label style={{
+              display: "flex", alignItems: "center", gap: 5,
+              color: detourWaypoints[i] ? "#C4982A" : "#6B5C48",
+              fontSize: 12, fontWeight: 600, fontFamily: F,
+              whiteSpace: "nowrap", cursor: "pointer", flexShrink: 0,
+              userSelect: "none",
+            }}>
+              <input
+                type="checkbox"
+                checked={!!detourWaypoints[i]}
+                onChange={() => toggleWaypoint(i)}
+                style={{ width: 14, height: 14, cursor: "pointer", accentColor: "#C4982A" }}
+              />
+              waypoint?
+            </label>
             <button
               onClick={() => removeDetour(i)}
               style={{

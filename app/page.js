@@ -860,7 +860,7 @@ export default function App() {
             legs.map((leg, li) => (
               <React.Fragment key={li}>
                 {/* Title page for every leg (including Leg 1) */}
-                <div className="print-page" style={{ alignItems: "center", justifyContent: "center" }}>
+                <div className="print-page" style={{ alignItems: "center", justifyContent: "center", minHeight: "100vh" }}>
                   <div style={{ textAlign: "center" }}>
                     <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 3, color: "#8B6914", marginBottom: 12 }}>Leg {li + 1}</div>
                     <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 800, color: "#222" }}>{leg.label}</div>
