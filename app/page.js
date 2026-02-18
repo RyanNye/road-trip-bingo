@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import AffiliateButtons from "@/app/components/AffiliateButtons";
+import PlaceInput from "@/app/components/PlaceInput";
 
 const RouteMap = dynamic(() => import("@/app/components/RouteMap"), {
   ssr: false,
@@ -16,11 +17,6 @@ const RouteMap = dynamic(() => import("@/app/components/RouteMap"), {
       Loading map...
     </div>
   ),
-});
-
-const PlaceInput = dynamic(() => import("@/app/components/PlaceInput"), {
-  ssr: false,
-  loading: () => <input style={{ width: "100%", padding: "14px 16px", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 10, color: "#FFF9EE", fontSize: 16, outline: "none", boxSizing: "border-box" }} />,
 });
 
 /*

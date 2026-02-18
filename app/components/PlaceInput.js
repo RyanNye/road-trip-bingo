@@ -14,9 +14,12 @@ export default function PlaceInput({ value, onChange, placeholder, style, onKeyD
 
   useEffect(() => {
     if (!inputRef.current) return;
+    const loader = getGoogleMapsLoader();
+    if (!loader) return; // no API key — plain input fallback
+
     let cancelled = false;
 
-    getGoogleMapsLoader()
+    loader
       .load()
       .then((google) => {
         if (cancelled || !inputRef.current) return;
@@ -24,11 +27,6 @@ export default function PlaceInput({ value, onChange, placeholder, style, onKeyD
         const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
           types: ["geocode"],
           fields: ["formatted_address", "name"],
-        });
-
-        // Prevent the form from submitting on Enter while the dropdown is open
-        inputRef.current.addEventListener("keydown", (e) => {
-          if (e.key === "Enter") e.stopPropagation();
         });
 
         autocomplete.addListener("place_changed", () => {
@@ -42,9 +40,7 @@ export default function PlaceInput({ value, onChange, placeholder, style, onKeyD
         // Silently fall back to plain input if Maps fails to load
       });
 
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

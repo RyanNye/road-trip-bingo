@@ -85,7 +85,9 @@ export default function RouteMap({ from, to, routeCoords, onWaypointsChange }) {
     let cancelled = false;
 
     const init = async () => {
-      const google = await getGoogleMapsLoader().load();
+      const loader = getGoogleMapsLoader();
+      if (!loader) return; // no API key — skip map
+      const google = await loader.load();
       if (cancelled) return;
 
       // Build initial bounds from Claude's routeCoords
