@@ -599,26 +599,48 @@ export default function App() {
 
             {routeData && (
               <div style={{ marginTop: 16, ...BOX }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                  <div>
-                    <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Route</div>
-                    <div style={{ fontSize: 16, fontWeight: 700 }}>{routeData.route_name}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: 20 }}>
-                    {routeData.estimated_miles != null && (
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: "#C4982A" }}>{routeData.estimated_miles}</div>
-                        <div style={{ fontSize: 11, color: "#6B5C48", textTransform: "uppercase", letterSpacing: 1 }}>miles</div>
+                {routeData.google_legs?.length > 1 ? (
+                  <>
+                    <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Route Breakdown</div>
+                    {routeData.google_legs.map((leg, i) => (
+                      <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: i < routeData.google_legs.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                        <div style={{ fontSize: 13, color: "#D4C5A9" }}>{leg.from} → {leg.to}</div>
+                        <div style={{ display: "flex", gap: 14, flexShrink: 0, marginLeft: 12 }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#C4982A" }}>{leg.miles} mi</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#C4982A" }}>{leg.hours}h</span>
+                        </div>
                       </div>
-                    )}
-                    {routeData.estimated_hours != null && (
-                      <div style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: "#C4982A" }}>{routeData.estimated_hours}</div>
-                        <div style={{ fontSize: 11, color: "#6B5C48", textTransform: "uppercase", letterSpacing: 1 }}>hrs</div>
+                    ))}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.1)" }}>
+                      <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1 }}>Total</div>
+                      <div style={{ display: "flex", gap: 14 }}>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "#C4982A" }}>{routeData.estimated_miles} mi</span>
+                        <span style={{ fontSize: 15, fontWeight: 700, color: "#C4982A" }}>{routeData.estimated_hours}h</span>
                       </div>
-                    )}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Route</div>
+                      <div style={{ fontSize: 16, fontWeight: 700 }}>{routeData.route_name}</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 20 }}>
+                      {routeData.estimated_miles != null && (
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: "#C4982A" }}>{routeData.estimated_miles}</div>
+                          <div style={{ fontSize: 11, color: "#6B5C48", textTransform: "uppercase", letterSpacing: 1 }}>miles</div>
+                        </div>
+                      )}
+                      {routeData.estimated_hours != null && (
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 22, fontWeight: 700, color: "#C4982A" }}>{routeData.estimated_hours}</div>
+                          <div style={{ fontSize: 11, color: "#6B5C48", textTransform: "uppercase", letterSpacing: 1 }}>hrs</div>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 

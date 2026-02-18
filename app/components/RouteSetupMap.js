@@ -65,7 +65,62 @@ function extractCountryCode(address) {
 
 // ── Helpers for async leg computation ────────────────────────────
 
-// Reverse-geocode a lat/lng → "City, State" string or null
+// Sample overview_path at a fractional position (0–1) along the route
+function coordAtFrac(routeCoords, frac) {
+  const idx = Math.round(frac * (routeCoords.length - 1));
+  return routeCoords[Math.min(Math.max(idx, 0), routeCoords.length - 1)];
+}
+
+// Convert a Directions API address to "City, State" — strips street number,
+// zip code, and country so we get something Claude-friendly like "Savannah, GA"
+function cleanAddress(address) {
+  if (!address) return null;
+  const parts = address.split(",").map((s) => s.trim()).filter(Boolean);
+  const trimmed = [...parts];
+  if (/^(USA?|United States)$/i.test(trimmed[trimmed.length - 1])) trimmed.pop();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length === 1) return trimmed[0].replace(/\s+\d{5}(-\d{4})?$/, "").trim();
+  const state = trimmed[trimmed.length - 1].replace(/\s+\d{5}(-\d{4})?$/, "").trim();
+  const city = trimmed[trimmed.length - 2];
+  return `${city}, ${state}`;
+}
+
+// Find intermediate city names by routing from segFrom → LatLng waypoints → segTo.
+// The Directions API returns leg.end_address for each intermediate stop, giving
+// real city names without needing the Geocoding API.
+async function getIntermediateCities(
+  google, segFrom, segTo, numBreaks, routeCoords, segStartFrac, segEndFrac
+) {
+  return new Promise((resolve) => {
+    const waypoints = [];
+    for (let k = 1; k <= numBreaks; k++) {
+      const frac = segStartFrac + (segEndFrac - segStartFrac) * k / (numBreaks + 1);
+      waypoints.push({ location: coordAtFrac(routeCoords, frac), stopover: true });
+    }
+    try {
+      new google.maps.DirectionsService().route(
+        { origin: segFrom, destination: segTo, waypoints, travelMode: "DRIVING" },
+        (result, status) => {
+          if (status !== "OK" || !result?.routes?.[0]?.legs) {
+            console.warn("[getIntermediateCities] status:", status);
+            resolve(null);
+            return;
+          }
+          const cities = result.routes[0].legs
+            .slice(0, -1)
+            .map((leg) => cleanAddress(leg.end_address))
+            .filter(Boolean);
+          resolve(cities.length === numBreaks ? cities : null);
+        }
+      );
+    } catch (e) {
+      console.error("[getIntermediateCities]", e);
+      resolve(null);
+    }
+  });
+}
+
+// Fallback: reverse-geocode a lat/lng (requires Geocoding API to be enabled)
 async function reverseGeocode(geocoder, latLng) {
   return new Promise((resolve) => {
     geocoder.geocode({ location: latLng }, (results, status) => {
@@ -79,31 +134,29 @@ async function reverseGeocode(geocoder, latLng) {
   });
 }
 
-// Sample overview_path at a fractional position (0–1) along the route
-function coordAtFrac(routeCoords, frac) {
-  const idx = Math.round(frac * (routeCoords.length - 1));
-  return routeCoords[Math.min(Math.max(idx, 0), routeCoords.length - 1)];
-}
-
-const TARGET_LEG_SECONDS = 4 * 3600; // aim for ~4-hour legs
+const TARGET_LEG_SECONDS = 3.5 * 3600; // aim for ~3.5h legs, never over ~5h
 
 /**
  * Compute suggested legs for a long route.
  *
  * Rules:
  *  - Checked detours ("waypoints") are mandatory leg boundaries.
- *  - Unchecked detours only affect Google routing; the system ignores them
- *    when deciding where to split legs.
- *  - Any segment longer than TARGET_LEG_SECONDS is automatically subdivided
- *    using reverse-geocoded points sampled from the overview_path.
+ *  - Unchecked detours only affect Google routing; ignored for leg splits.
+ *  - Any segment > TARGET_LEG_SECONDS is automatically subdivided using a
+ *    secondary Directions API call (no Geocoding API required). Falls back
+ *    to reverse-geocoding if the secondary call fails.
  */
 async function computeSuggestedLegs(
   google, from, to, detours, detourWaypoints, googleLegs, routeCoords, totalSeconds
 ) {
-  const validDetours = detours.filter(Boolean);
+  // Build validPairs so detour text and waypoint flags stay aligned even when
+  // some detour rows were left blank
+  const validPairs = detours.reduce((acc, d, i) => {
+    if (d) acc.push({ detour: d, isWaypoint: !!detourWaypoints[i] });
+    return acc;
+  }, []);
 
   // Cumulative drive time at each Google-leg boundary
-  // googleLegs[i] ends at: detours[i] (if exists), otherwise `to`
   const cumTimes = [];
   let cum = 0;
   for (const leg of googleLegs) {
@@ -111,7 +164,7 @@ async function computeSuggestedLegs(
     cumTimes.push(cum);
   }
 
-  // All user-defined points with cumulative time and mandatory flag
+  // Build all user-defined points with cumulative time and mandatory flag
   const userPoints = [
     {
       time: 0,
@@ -120,12 +173,12 @@ async function computeSuggestedLegs(
       flagCode: extractCountryCode(googleLegs[0].start_address) || "us",
     },
   ];
-  validDetours.forEach((d, i) => {
+  validPairs.forEach(({ detour, isWaypoint }, i) => {
     userPoints.push({
       time: cumTimes[i],
-      label: d,
-      mandatory: !!detourWaypoints[i],
-      flagCode: extractCountryCode(d) || "us",
+      label: detour,
+      mandatory: isWaypoint,
+      flagCode: extractCountryCode(detour) || "us",
     });
   });
   userPoints.push({
@@ -135,10 +188,8 @@ async function computeSuggestedLegs(
     flagCode: extractCountryCode(googleLegs[googleLegs.length - 1].end_address) || "us",
   });
 
-  // Only mandatory points become leg boundaries
+  // Only checked waypoints (+ origin/destination) become leg boundaries
   const mandatory = userPoints.filter((p) => p.mandatory);
-
-  const geocoder = new google.maps.Geocoder();
   const finalBoundaries = [];
 
   for (let i = 0; i < mandatory.length; i++) {
@@ -151,26 +202,46 @@ async function computeSuggestedLegs(
 
       if (segDuration > TARGET_LEG_SECONDS) {
         const numLegs = Math.ceil(segDuration / TARGET_LEG_SECONDS);
-        // Add (numLegs - 1) intermediate break points
-        for (let k = 1; k < numLegs; k++) {
-          const targetTime = segStart.time + (segDuration * k) / numLegs;
-          const frac = totalSeconds > 0 ? targetTime / totalSeconds : 0;
-          const coord = coordAtFrac(routeCoords, frac);
-          const cityName = await reverseGeocode(geocoder, coord);
-          if (cityName) {
+        const numBreaks = numLegs - 1;
+        const segStartFrac = totalSeconds > 0 ? segStart.time / totalSeconds : 0;
+        const segEndFrac = totalSeconds > 0 ? segEnd.time / totalSeconds : 1;
+
+        // Primary: secondary Directions API call — only needs Directions API
+        const cities = await getIntermediateCities(
+          google, segStart.label, segEnd.label,
+          numBreaks, routeCoords, segStartFrac, segEndFrac
+        );
+
+        if (cities) {
+          cities.forEach((city, k) => {
             finalBoundaries.push({
-              time: targetTime,
-              label: cityName,
+              time: segStart.time + (segDuration * (k + 1)) / numLegs,
+              label: city,
               mandatory: false,
-              flagCode: extractCountryCode(cityName) || "us",
+              flagCode: extractCountryCode(city) || "us",
             });
+          });
+        } else {
+          // Fallback: reverse geocoding (needs Geocoding API enabled in GCP)
+          const geocoder = new google.maps.Geocoder();
+          for (let k = 1; k < numLegs; k++) {
+            const targetTime = segStart.time + (segDuration * k) / numLegs;
+            const coord = coordAtFrac(routeCoords, totalSeconds > 0 ? targetTime / totalSeconds : 0);
+            const cityName = await reverseGeocode(geocoder, coord);
+            if (cityName) {
+              finalBoundaries.push({
+                time: targetTime,
+                label: cityName,
+                mandatory: false,
+                flagCode: extractCountryCode(cityName) || "us",
+              });
+            }
           }
         }
       }
     }
   }
 
-  // Sort by time in case async geocodes arrived out of order
   finalBoundaries.sort((a, b) => a.time - b.time);
 
   if (finalBoundaries.length < 2) return null;
@@ -183,6 +254,7 @@ async function computeSuggestedLegs(
       to: end.label,
       origin_flag_code: start.flagCode,
       destination_flag_code: end.flagCode,
+      estimated_hours: parseFloat(((end.time - start.time) / 3600).toFixed(1)),
       waypoints: [],
     };
   });
@@ -204,25 +276,37 @@ async function buildRouteData(result, google, from, to, detours, detourWaypoints
   const toCity = to.split(",")[0].trim();
   const routeName = `${fromCity} to ${toCity}`;
 
-  const validDetours = detours.filter(Boolean);
-  const viaText = validDetours.length
-    ? " via " + validDetours.map((d) => d.split(",")[0].trim()).join(", ")
+  // validPairs keeps detour text and waypoint flags aligned even when some rows are blank
+  const validPairs = detours.reduce((acc, d, i) => {
+    if (d) acc.push({ detour: d, isWaypoint: !!detourWaypoints[i] });
+    return acc;
+  }, []);
+  const viaText = validPairs.length
+    ? " via " + validPairs.map(({ detour }) => detour.split(",")[0].trim()).join(", ")
     : "";
   const routeSummary =
     `${from} to ${to}${viaText}. ` +
     `Approximately ${estimatedMiles} miles (${estimatedHours} hrs driving).`;
 
   // Include isWaypoint so the backend knows which stops are mandatory boundaries
-  const majorWaypoints = validDetours.map((d, i) => {
-    const parts = d.split(",").map((s) => s.trim());
+  const majorWaypoints = validPairs.map(({ detour, isWaypoint }) => {
+    const parts = detour.split(",").map((s) => s.trim());
     const name = parts
       .slice(0, 2)
       .join(", ")
       .replace(/\s*\d{5}(-\d{4})?\s*/g, "")
       .trim();
-    const country = (extractCountryCode(d) || "us").toUpperCase();
-    return { name, country, isWaypoint: !!detourWaypoints[i] };
+    const country = (extractCountryCode(detour) || "us").toUpperCase();
+    return { name, country, isWaypoint };
   });
+
+  // Per-leg travel data directly from Google Directions (one entry per detour stop)
+  const google_legs = legs.map((leg) => ({
+    from: cleanAddress(leg.start_address) || leg.start_address,
+    to: cleanAddress(leg.end_address) || leg.end_address,
+    miles: Math.round(leg.distance.value / 1609.34),
+    hours: parseFloat((leg.duration.value / 3600).toFixed(1)),
+  }));
 
   const originFlag = extractCountryCode(legs[0].start_address) || "us";
   const destFlag = extractCountryCode(legs[legs.length - 1].end_address) || "us";
@@ -252,6 +336,7 @@ async function buildRouteData(result, google, from, to, detours, detourWaypoints
     origin_flag_code: originFlag,
     destination_flag_code: destFlag,
     suggested_legs: suggestedLegs,
+    google_legs,
   };
 }
 
