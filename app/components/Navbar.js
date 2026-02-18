@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 
@@ -35,6 +35,21 @@ export default function Navbar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tripsOpen, setTripsOpen] = useState(false);
+  const [isPro, setIsPro] = useState(false);
+  const [tierLoaded, setTierLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/generations")
+      .then((r) => r.json())
+      .then((d) => { setIsPro(d.isPro || false); setTierLoaded(true); })
+      .catch(() => setTierLoaded(true));
+  }, []);
+
+  const startCheckout = async () => {
+    const res = await fetch("/api/checkout", { method: "POST" });
+    const { url } = await res.json();
+    if (url) window.location.href = url;
+  };
 
   return (
     <nav className="no-print" style={{
@@ -88,6 +103,19 @@ export default function Navbar() {
           <NavLink href="/routes" pathname={pathname}>Popular Routes</NavLink>
           <NavLink href="/about" pathname={pathname}>About</NavLink>
         </div>
+
+        {/* Upgrade to Pro link (desktop, free users only) */}
+        {tierLoaded && !isPro && (
+          <button onClick={startCheckout} className="nav-cta" style={{
+            padding: "7px 14px", background: "transparent",
+            border: "1px solid rgba(196,152,42,0.4)", borderRadius: 8,
+            color: "#C4982A", fontSize: 12, fontWeight: 700, fontFamily: F,
+            cursor: "pointer", letterSpacing: 0.5, marginRight: 8, flexShrink: 0,
+            display: "none", // shown via media query
+          }}>
+            Upgrade to Pro
+          </button>
+        )}
 
         {/* Generate CTA */}
         <Link href="/" style={{
@@ -143,6 +171,15 @@ export default function Navbar() {
               {label.trim()}
             </Link>
           ))}
+          {tierLoaded && !isPro && (
+            <button onClick={() => { setMobileOpen(false); startCheckout(); }} style={{
+              padding: "10px 16px", fontSize: 14, fontFamily: F, fontWeight: 700,
+              color: "#C4982A", background: "none", border: "none", cursor: "pointer",
+              textAlign: "left",
+            }}>
+              Upgrade to Pro — $5/year
+            </button>
+          )}
         </div>
       )}
 

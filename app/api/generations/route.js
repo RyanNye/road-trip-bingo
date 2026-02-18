@@ -31,11 +31,27 @@ async function getUsed(uuid) {
   return { year, used: data?.count || 0 };
 }
 
+async function getUserTier(uuid) {
+  const { data } = await supabaseAdmin
+    .from("users")
+    .select("tier")
+    .eq("user_uuid", uuid)
+    .single();
+  return data?.tier || "free";
+}
+
 export async function GET(request) {
   const uuid = getOrMakeUuid(request);
-  const { used } = await getUsed(uuid);
+  const [{ used }, tier] = await Promise.all([getUsed(uuid), getUserTier(uuid)]);
+  const isPro = tier === "paid_annual";
+
   return stamp(
-    NextResponse.json({ remaining: Math.max(0, YEARLY_LIMIT - used), limit: YEARLY_LIMIT }),
+    NextResponse.json({
+      remaining: isPro ? null : Math.max(0, YEARLY_LIMIT - used),
+      limit: YEARLY_LIMIT,
+      tier,
+      isPro,
+    }),
     uuid
   );
 }
@@ -43,11 +59,20 @@ export async function GET(request) {
 export async function POST(request) {
   const { count = 1 } = await request.json();
   const uuid = getOrMakeUuid(request);
-  const { year, used } = await getUsed(uuid);
+  const [{ year, used }, tier] = await Promise.all([getUsed(uuid), getUserTier(uuid)]);
+  const isPro = tier === "paid_annual";
+
+  // Pro users have unlimited generations — just record and return
+  if (isPro) {
+    return stamp(
+      NextResponse.json({ remaining: null, limit: YEARLY_LIMIT, tier, isPro }),
+      uuid
+    );
+  }
 
   if (used >= YEARLY_LIMIT) {
     return stamp(
-      NextResponse.json({ error: "limit_exceeded", remaining: 0, limit: YEARLY_LIMIT }, { status: 403 }),
+      NextResponse.json({ error: "limit_exceeded", remaining: 0, limit: YEARLY_LIMIT, tier, isPro }, { status: 403 }),
       uuid
     );
   }
@@ -58,7 +83,7 @@ export async function POST(request) {
     .upsert({ user_uuid: uuid, year, count: newCount }, { onConflict: "user_uuid,year" });
 
   return stamp(
-    NextResponse.json({ remaining: Math.max(0, YEARLY_LIMIT - newCount), limit: YEARLY_LIMIT }),
+    NextResponse.json({ remaining: Math.max(0, YEARLY_LIMIT - newCount), limit: YEARLY_LIMIT, tier, isPro }),
     uuid
   );
 }

@@ -305,6 +305,8 @@ export default function App() {
   const gridSize = 5;
   const [numCardsStr, setNumCardsStr] = useState("4");
   const [gensLeft, setGensLeft] = useState(null); // null = loading from server
+  const [isPro, setIsPro] = useState(false);
+  const [upgradedBanner, setUpgradedBanner] = useState(false);
   const [routeData, setRouteData] = useState(null);
 
   const [wpInput, setWpInput] = useState("");
@@ -367,10 +369,19 @@ export default function App() {
     if (params.get("from")) setFrom(params.get("from"));
     if (params.get("to")) setTo(params.get("to"));
 
+    // Show success banner after Stripe redirect
+    if (params.get("upgraded")) {
+      setUpgradedBanner(true);
+      window.history.replaceState({}, "", "/");
+    }
+
     // Fetch remaining generations — server identifies user via cookie
     fetch("/api/generations")
       .then((r) => r.json())
-      .then((d) => setGensLeft(d.remaining ?? 10))
+      .then((d) => {
+        setIsPro(d.isPro || false);
+        setGensLeft(d.isPro ? null : (d.remaining ?? 10));
+      })
       .catch(() => setGensLeft(10));
   }, []);
 
@@ -592,6 +603,13 @@ export default function App() {
     }
   };
 
+  const startCheckout = async () => {
+    const res = await fetch("/api/checkout", { method: "POST" });
+    const { url, error } = await res.json();
+    if (url) window.location.href = url;
+    else console.error("Checkout error:", error);
+  };
+
   const handlePrint = () => window.print();
 
   const reset = () => {
@@ -636,6 +654,15 @@ export default function App() {
         {/* ─── SETUP ─── */}
         {phase === "setup" && (
           <div className="no-print" style={{ maxWidth: 480, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
+            {/* Post-payment success banner */}
+            {upgradedBanner && (
+              <div style={{ marginBottom: 20, padding: 16, background: "rgba(106,176,46,0.1)", border: "1px solid rgba(106,176,46,0.3)", borderRadius: 12 }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#6ab02e", marginBottom: 4 }}>You&apos;re now Pro!</div>
+                <div style={{ fontSize: 13, color: "#8B7355" }}>Enjoy unlimited bingo card generations. Thanks for supporting Highway Bingo!</div>
+                <button onClick={() => setUpgradedBanner(false)} style={{ ...B2, marginTop: 8, fontSize: 12 }}>Dismiss</button>
+              </div>
+            )}
+
             {returnBanner && (
               <div style={{ marginBottom: 20, padding: 16, background: "rgba(196,152,42,0.08)", border: "1px solid rgba(196,152,42,0.2)", borderRadius: 12 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#C4982A", marginBottom: 8 }}>Welcome back! How was your {returnBanner.from} → {returnBanner.to} trip?</div>
@@ -646,10 +673,19 @@ export default function App() {
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
-              <div style={{ background: "rgba(196,152,42,0.1)", border: "1px solid rgba(196,152,42,0.3)", borderRadius: 100, padding: "8px 20px", fontSize: 13, fontWeight: 600, color: "#C4982A" }}>
-                {gensLeft === null ? "Loading..." : `${gensLeft} free generation${gensLeft !== 1 ? "s" : ""} remaining`}
+              <div style={{ background: isPro ? "rgba(106,176,46,0.12)" : "rgba(196,152,42,0.1)", border: `1px solid ${isPro ? "rgba(106,176,46,0.3)" : "rgba(196,152,42,0.3)"}`, borderRadius: 100, padding: "8px 20px", fontSize: 13, fontWeight: 600, color: isPro ? "#6ab02e" : "#C4982A" }}>
+                {gensLeft === null && !isPro ? "Loading..." : isPro ? "✦ Pro — Unlimited generations" : `${gensLeft} free generation${gensLeft !== 1 ? "s" : ""} remaining`}
               </div>
             </div>
+
+            {/* Upgrade prompt — shown when free user hits limit */}
+            {gensLeft === 0 && !isPro && (
+              <div style={{ marginBottom: 24, padding: 20, background: "rgba(196,152,42,0.06)", border: "1px solid rgba(196,152,42,0.25)", borderRadius: 14, textAlign: "center" }}>
+                <div style={{ fontFamily: SF, fontSize: 18, fontWeight: 700, marginBottom: 6 }}>You&apos;ve used all 10 free generations</div>
+                <div style={{ fontSize: 13, color: "#8B7355", marginBottom: 16, lineHeight: 1.5 }}>Upgrade to Pro for unlimited bingo cards — for every trip, every year.</div>
+                <button onClick={startCheckout} style={{ ...B1(false), padding: "14px 24px", fontSize: 15 }}>Upgrade to Pro — $5/year</button>
+              </div>
+            )}
             <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><input style={IN} value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Chicago, IL" /></div>
             <div style={{ textAlign: "center", margin: "4px 0", color: "#6B5C48", fontSize: 20 }}>↓</div>
             <div style={{ marginBottom: 28 }}><label style={L}>Destination</label><input style={IN} value={to} onChange={(e) => setTo(e.target.value)} placeholder="Santa Monica, CA" /></div>
@@ -803,7 +839,15 @@ export default function App() {
                 <button onClick={generate} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
               </div>
             )}
-            <button onClick={generate} style={B1(false)}>Generate {Math.min(20, Math.max(1, parseInt(numCardsStr) || 4))} Card{Math.min(20, Math.max(1, parseInt(numCardsStr) || 4)) !== 1 ? "s" : ""} 🎲</button>
+            {gensLeft === 0 && !isPro ? (
+              <div style={{ padding: 20, background: "rgba(196,152,42,0.06)", border: "1px solid rgba(196,152,42,0.25)", borderRadius: 14, textAlign: "center" }}>
+                <div style={{ fontFamily: SF, fontSize: 17, fontWeight: 700, marginBottom: 6 }}>Generation limit reached</div>
+                <div style={{ fontSize: 13, color: "#8B7355", marginBottom: 16, lineHeight: 1.5 }}>Upgrade to Pro for unlimited bingo cards.</div>
+                <button onClick={startCheckout} style={B1(false)}>Upgrade to Pro — $5/year</button>
+              </div>
+            ) : (
+              <button onClick={generate} style={B1(false)}>Generate {Math.min(20, Math.max(1, parseInt(numCardsStr) || 4))} Card{Math.min(20, Math.max(1, parseInt(numCardsStr) || 4)) !== 1 ? "s" : ""} 🎲</button>
+            )}
             <div style={{ textAlign: "center", marginTop: 12 }}>
               <button onClick={() => setPhase("route")} style={{ background: "none", border: "none", color: "#6B5C48", cursor: "pointer", fontSize: 13 }}>← Back to route</button>
             </div>
