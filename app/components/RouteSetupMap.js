@@ -221,7 +221,7 @@ export default function RouteSetupMap({
   useEffect(() => {
     if (!from || !to) {
       // Clear route display when inputs are incomplete
-      if (rendererRef.current) rendererRef.current.setDirections({ routes: [] });
+      try { if (rendererRef.current) rendererRef.current.setDirections({ routes: [] }); } catch (_) {}
       onRouteChange(null);
       return;
     }
@@ -231,22 +231,27 @@ export default function RouteSetupMap({
 
     clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      svc.route(
-        {
-          origin: from,
-          destination: to,
-          waypoints: detours.filter(Boolean).map((d) => ({ location: d, stopover: true })),
-          travelMode: google.maps.TravelMode.DRIVING,
-        },
-        (result, status) => {
-          if (status === "OK" && rendererRef.current) {
-            rendererRef.current.setDirections(result);
-            // directions_changed fires → calls onRouteChange
-          } else {
-            onRouteChange(null);
+      try {
+        svc.route(
+          {
+            origin: from,
+            destination: to,
+            waypoints: detours.filter(Boolean).map((d) => ({ location: d, stopover: true })),
+            travelMode: "DRIVING",
+          },
+          (result, status) => {
+            if (status === "OK" && rendererRef.current) {
+              rendererRef.current.setDirections(result);
+              // directions_changed fires → calls onRouteChange
+            } else {
+              onRouteChange(null);
+            }
           }
-        }
-      );
+        );
+      } catch (e) {
+        console.error("[RouteSetupMap] Directions request failed:", e);
+        onRouteChange(null);
+      }
     }, 500);
   }, [from, to, detours]); // eslint-disable-line react-hooks/exhaustive-deps
 
