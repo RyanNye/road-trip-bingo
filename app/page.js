@@ -301,7 +301,6 @@ export default function App() {
   const gridSize = 5;
   const [numCardsStr, setNumCardsStr] = useState("4");
   const [gensLeft, setGensLeft] = useState(null); // null = loading from server
-  const [userUuid, setUserUuid] = useState(null);
   const [routeData, setRouteData] = useState(null);
 
   const [wpInput, setWpInput] = useState("");
@@ -364,19 +363,11 @@ export default function App() {
     if (params.get("from")) setFrom(params.get("from"));
     if (params.get("to")) setTo(params.get("to"));
 
-    // Load or create a persistent UUID for this browser
-    let uuid = localStorage.getItem("rtb_user_uuid");
-    if (!uuid) {
-      uuid = crypto.randomUUID();
-      localStorage.setItem("rtb_user_uuid", uuid);
-    }
-    setUserUuid(uuid);
-
-    // Fetch remaining generations from server
-    fetch(`/api/generations?uuid=${uuid}`)
+    // Fetch remaining generations — server identifies user via cookie
+    fetch("/api/generations")
       .then((r) => r.json())
       .then((d) => setGensLeft(d.remaining ?? 10))
-      .catch(() => setGensLeft(10)); // fallback if API is down
+      .catch(() => setGensLeft(10));
   }, []);
 
   const planRoute = async () => {
@@ -496,7 +487,7 @@ export default function App() {
         fetch("/api/generations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uuid: userUuid, count: gensNeeded }),
+          body: JSON.stringify({ count: gensNeeded }),
         }).then((r) => r.json()).then((d) => { if (d.remaining != null) setGensLeft(d.remaining); });
 
         localStorage.setItem("rtb_last_session", JSON.stringify({
@@ -554,7 +545,7 @@ export default function App() {
         fetch("/api/generations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uuid: userUuid, count: 1 }),
+          body: JSON.stringify({ count: 1 }),
         }).then((r) => r.json()).then((d) => { if (d.remaining != null) setGensLeft(d.remaining); });
         setTimeout(() => setPhase("cards"), 300);
       }
