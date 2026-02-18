@@ -1,20 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import dynamic from "next/dynamic";
 import AffiliateButtons from "@/app/components/AffiliateButtons";
-
-const RouteSetupMap = dynamic(() => import("@/app/components/RouteSetupMap"), {
-  ssr: false,
-  loading: () => (
-    <div style={{ width: "100%", height: "min(400px, 50vh)", borderRadius: 12,
-      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      color: "#6B5C48", fontSize: 14, fontFamily: "'Source Sans 3', system-ui, sans-serif" }}>
-      Loading map…
-    </div>
-  ),
-});
+import RouteSetupMap from "@/app/components/RouteSetupMap";
 
 
 /*
