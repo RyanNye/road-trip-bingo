@@ -256,11 +256,11 @@ function PrintCell({ item, gridSize }) {
     }}>
       {isFree ? (
         <>
-          <span style={{ position: "absolute", fontSize: 28, color: "#FFD700", lineHeight: 1, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>★</span>
-          <div style={{ position: "relative", zIndex: 1, fontSize: 18, fontWeight: 700, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
+          <span style={{ position: "absolute", fontSize: 84, color: "#FFD700", lineHeight: 1, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>★</span>
+          <div style={{ position: "relative", zIndex: 1, fontSize: 22, fontWeight: 700, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
         </>
       ) : (
-        <div style={{ fontSize: 18, fontWeight: 600, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
+        <div style={{ fontSize: 22, fontWeight: 600, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
       )}
     </div>
   );
@@ -504,7 +504,6 @@ export default function App() {
         if (!res.ok) throw new Error("Item generation failed");
         const data = await res.json();
 
-        clearInterval(progRef.current); setProgress(100); setLoadMsg("Done!");
         const pool = [...customItems, ...(data.items || [])];
         setAllItems(pool);
         setLegs([]);
@@ -513,7 +512,9 @@ export default function App() {
           from, to, routeId: data._routeId, items: pool,
         }));
 
-        fetch("/api/generate-blurb", {
+        clearInterval(progRef.current); setProgress(90); setLoadMsg("Writing your route guide...");
+
+        const blurbData = await fetch("/api/generate-blurb", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -522,7 +523,10 @@ export default function App() {
             major_waypoints: routeData?.major_waypoints,
             from, to,
           }),
-        }).then((r) => r.json()).then((d) => setBlurb(d)).catch(() => {});
+        }).then((r) => r.json()).catch(() => null);
+
+        setProgress(100); setLoadMsg("Done!");
+        setBlurb(blurbData);
 
         const guaranteed = pool.filter((i) => i.tier === "custom" || i.tier === "legendary" || i.tier === "community_verified");
         const built = [];
