@@ -358,6 +358,10 @@ export default function App() {
   useEffect(() => {
     const s = localStorage.getItem("rtb_last_session");
     if (s) setReturnBanner(JSON.parse(s));
+    // Pre-fill from URL params (e.g. from a route page CTA)
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("from")) setFrom(params.get("from"));
+    if (params.get("to")) setTo(params.get("to"));
   }, []);
 
   const planRoute = async () => {
