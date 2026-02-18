@@ -83,6 +83,10 @@ const ROUTES = [
   // ── Australia ──
   { label: "Sydney → Melbourne",       from: "Sydney, NSW",        to: "Melbourne, VIC" },
   { label: "Great Ocean Road",         from: "Melbourne, VIC",     to: "Warrnambool, VIC" },
+  // ── Africa ──
+  { label: "Cape Town → Johannesburg", from: "Cape Town, South Africa", to: "Johannesburg, South Africa" },
+  // ── Latin America ──
+  { label: "San José → La Fortuna",   from: "San José, Costa Rica",    to: "La Fortuna, Costa Rica" },
 ];
 
 // ═══════════════════════════════════════════════════════════════

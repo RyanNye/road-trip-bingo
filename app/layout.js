@@ -1,8 +1,9 @@
 import "./globals.css";
+import Navbar from "./components/Navbar";
 
 export const metadata = {
-  title: "Road Trip Bingo",
-  description: "Turn any highway into an adventure",
+  title: "Highway Bingo — Road Trip Bingo Card Generator",
+  description: "Generate custom road trip bingo cards for any route. Free, printable, and fun for the whole family.",
 };
 
 export default function RootLayout({ children }) {
@@ -11,7 +12,10 @@ export default function RootLayout({ children }) {
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </head>
-      <body>{children}</body>
+      <body>
+        <Navbar />
+        {children}
+      </body>
     </html>
   );
 }
