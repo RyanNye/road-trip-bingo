@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import * as Flags from 'country-flag-icons/react/3x2';
 
 /*
   ROAD TRIP BINGO — Claude-Powered
@@ -21,6 +22,43 @@ const IN = { width: "100%", padding: "14px 16px", background: "rgba(255,255,255,
 const B1 = (off) => ({ width: "100%", padding: 16, background: off ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg,#8B6914,#C4982A 50%,#8B6914)", border: "none", borderRadius: 12, color: off ? "#6B5C48" : "#FFF", fontSize: 16, fontWeight: 700, fontFamily: F, cursor: off ? "not-allowed" : "pointer", textTransform: "uppercase", letterSpacing: 2, boxShadow: off ? "none" : "0 4px 16px rgba(196,152,42,0.3)" });
 const B2 = { background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "8px 16px", color: "#A89270", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F };
 const BOX = { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14, padding: 20, marginBottom: 16 };
+
+// ═══════════════════════════════════════════════════════════════
+// FLAG LOOKUP
+// ═══════════════════════════════════════════════════════════════
+
+const US_STATES = new Set(["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"]);
+const CA_PROVINCES = new Set(["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"]);
+const COUNTRY_LOOKUP = {
+  "united states": "US", "usa": "US", "canada": "CA", "mexico": "MX",
+  "united kingdom": "GB", "uk": "GB", "great britain": "GB", "england": "GB", "scotland": "GB", "wales": "GB",
+  "france": "FR", "germany": "DE", "italy": "IT", "spain": "ES", "portugal": "PT",
+  "australia": "AU", "new zealand": "NZ", "japan": "JP", "china": "CN",
+  "india": "IN", "brazil": "BR", "argentina": "AR", "ireland": "IE",
+  "netherlands": "NL", "belgium": "BE", "switzerland": "CH",
+  "sweden": "SE", "norway": "NO", "denmark": "DK", "finland": "FI",
+  "poland": "PL", "austria": "AT", "greece": "GR", "turkey": "TR",
+  "south africa": "ZA", "kenya": "KE", "nigeria": "NG",
+  "thailand": "TH", "vietnam": "VN", "indonesia": "ID",
+  "philippines": "PH", "singapore": "SG", "malaysia": "MY",
+  "south korea": "KR", "ukraine": "UA", "russia": "RU",
+  "israel": "IL", "egypt": "EG", "morocco": "MA",
+};
+
+function getFlagCode(location) {
+  if (!location) return null;
+  const codeMatch = location.match(/,\s*([A-Za-z]{2})\s*$/);
+  if (codeMatch) {
+    const code = codeMatch[1].toUpperCase();
+    if (US_STATES.has(code)) return "US";
+    if (CA_PROVINCES.has(code)) return "CA";
+  }
+  const lower = location.toLowerCase();
+  for (const [name, code] of Object.entries(COUNTRY_LOOKUP)) {
+    if (lower.includes(name)) return code;
+  }
+  return null;
+}
 
 // ═══════════════════════════════════════════════════════════════
 // UTILITIES
@@ -98,6 +136,7 @@ const PRINT_CSS = `
   }
   .print-header h2 { font-size: 26px; font-weight: 800; margin: 0; color: #222; line-height: 1.2; }
   .screen-only { display: none !important; }
+  .print-banner { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
 @media screen {
   .print-only { display: none !important; }
@@ -218,6 +257,22 @@ function MissPanel({ onAdd }) {
         <input style={{ ...IN, flex: 1, padding: "8px 12px", fontSize: 14 }} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Description (optional)" />
         <button onClick={submit} disabled={!name.trim()} style={{ ...B2, padding: "8px 18px", opacity: name.trim() ? 1 : 0.4, color: name.trim() ? "#E06B8F" : "#6B5C48", borderColor: name.trim() ? "rgba(224,107,143,0.3)" : undefined }}>Add</button>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FLAG COMPONENT
+// ═══════════════════════════════════════════════════════════════
+
+function FlagSpan({ location }) {
+  const code = getFlagCode(location);
+  if (!code) return <div style={{ width: 44, height: 30, flexShrink: 0 }} />;
+  const FlagComponent = Flags[code];
+  if (!FlagComponent) return <div style={{ width: 44, height: 30, flexShrink: 0 }} />;
+  return (
+    <div style={{ width: 44, height: 30, flexShrink: 0, borderRadius: 3, overflow: "hidden", border: "1px solid rgba(255,255,255,0.5)", boxShadow: "0 1px 3px rgba(0,0,0,0.2)" }}>
+      <FlagComponent style={{ width: "100%", height: "100%", display: "block" }} />
     </div>
   );
 }
@@ -592,15 +647,16 @@ export default function App() {
               </div>
             )}
 
-            {/* New Route button at bottom */}
-            <div className="no-print" style={{ maxWidth: 560, margin: "24px auto 0", width: "100%" }}>
+            {/* Bottom buttons */}
+            <div className="no-print" style={{ maxWidth: 560, margin: "24px auto 0", width: "100%", display: "flex", gap: 12 }}>
               <button onClick={reset} style={B2}>← New Route</button>
+              <button onClick={() => { setFb({}); setFbDone(false); setPhase("feedback"); }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Leave a Review</button>
             </div>
 
             {/* Print output */}
             <div className="print-only">
               {blurb?.blurbs?.length > 0 && (
-                <div className="print-page" style={{ padding: "0.5in" }}>
+                <div className="print-page" style={{ padding: "0.5in", alignItems: "flex-start", justifyContent: "flex-start" }}>
                   <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>Route Guide</div>
                   <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{from} → {to}</div>
                   {blurb.blurbs.map((b, i) => (
@@ -613,28 +669,15 @@ export default function App() {
               )}
               {cards.map((card, ci) => (
                 <div key={ci} className="print-page">
-                  <div style={{ border: "3px solid #111", borderRadius: 10, overflow: "hidden", width: "100%", background: "white" }}>
-                    {/* Banner */}
-                    <div style={{ position: "relative", padding: "14px 20px", borderBottom: "2px solid #111", background: "white", display: "flex", alignItems: "center", gap: 16 }}>
-                      <div style={{ position: "absolute", inset: 5, border: "1px solid #bbb", borderRadius: 5, pointerEvents: "none" }} />
-                      {/* Highway shield left */}
-                      <svg width="44" height="52" viewBox="0 0 44 52" fill="none" style={{ flexShrink: 0 }}>
-                        <path d="M2 2 H42 V32 L22 50 L2 32 Z" fill="#111"/>
-                        <path d="M5 5 H39 V31 L22 46 L5 31 Z" fill="none" stroke="white" strokeWidth="1.5"/>
-                        <text x="22" y="20" textAnchor="middle" fill="white" fontSize="6" fontWeight="800" fontFamily="Arial,sans-serif" letterSpacing="1">HIGHWAY</text>
-                        <text x="22" y="36" textAnchor="middle" fill="white" fontSize="13" fontFamily="Arial,sans-serif">★</text>
-                      </svg>
-                      {/* Title */}
-                      <div style={{ flex: 1, textAlign: "center", fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, fontWeight: 800, color: "#111", lineHeight: 1.25 }}>
+                  <div style={{ border: "3px solid #8B6914", borderRadius: 10, overflow: "hidden", width: "100%", background: "white" }}>
+                    {/* Colored banner */}
+                    <div className="print-banner" style={{ position: "relative", padding: "14px 20px", borderBottom: "2px solid #8B6914", background: "linear-gradient(135deg, #7A5514, #C4982A)", display: "flex", alignItems: "center", gap: 16 }}>
+                      <div style={{ position: "absolute", inset: 5, border: "1px solid rgba(255,255,255,0.3)", borderRadius: 5, pointerEvents: "none" }} />
+                      <FlagSpan location={from} />
+                      <div style={{ flex: 1, textAlign: "center", fontFamily: "'Playfair Display', Georgia, serif", fontSize: 18, fontWeight: 800, color: "white", lineHeight: 1.25 }}>
                         {toTitleCase(from)} to {toTitleCase(to)} Highway Bingo!
                       </div>
-                      {/* Highway shield right */}
-                      <svg width="44" height="52" viewBox="0 0 44 52" fill="none" style={{ flexShrink: 0 }}>
-                        <path d="M2 2 H42 V32 L22 50 L2 32 Z" fill="#111"/>
-                        <path d="M5 5 H39 V31 L22 46 L5 31 Z" fill="none" stroke="white" strokeWidth="1.5"/>
-                        <text x="22" y="20" textAnchor="middle" fill="white" fontSize="6" fontWeight="800" fontFamily="Arial,sans-serif" letterSpacing="1">HIGHWAY</text>
-                        <text x="22" y="36" textAnchor="middle" fill="white" fontSize="13" fontFamily="Arial,sans-serif">★</text>
-                      </svg>
+                      <FlagSpan location={to} />
                     </div>
                     {/* Bingo grid */}
                     <div style={{ padding: 12, background: "white" }}>
