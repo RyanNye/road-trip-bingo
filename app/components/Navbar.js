@@ -57,8 +57,6 @@ export default function Navbar() {
 
         {/* Desktop links */}
         <div className="desktop-nav" style={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-          <NavLink href="/examples" pathname={pathname}>Examples</NavLink>
-
           {/* Top Trips dropdown */}
           <div
             style={{ position: "relative" }}
@@ -87,7 +85,7 @@ export default function Navbar() {
             )}
           </div>
 
-          <NavLink href="/routes" pathname={pathname}>All Routes</NavLink>
+          <NavLink href="/routes" pathname={pathname}>Popular Routes</NavLink>
           <NavLink href="/about" pathname={pathname}>About</NavLink>
         </div>
 
@@ -126,10 +124,9 @@ export default function Navbar() {
           display: "flex", flexDirection: "column", gap: 2,
         }}>
           {[
-            { href: "/examples", label: "Examples" },
             { href: "/top-trips", label: "Top Trips" },
             ...REGIONS.map((r) => ({ href: `/top-trips/${r.slug}`, label: `  ↳ ${r.label}` })),
-            { href: "/routes", label: "All Routes" },
+            { href: "/routes", label: "Popular Routes" },
             { href: "/about", label: "About" },
             { href: "/", label: "← Generate Cards" },
           ].map(({ href, label }) => (
