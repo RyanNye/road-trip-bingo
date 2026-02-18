@@ -65,6 +65,7 @@ const PRINT_CSS = `
 @media print {
   body, html { background: white !important; margin: 0; padding: 0; }
   .no-print { display: none !important; }
+  .screen-wrapper { display: none !important; }
   .print-page {
     page-break-after: always;
     width: 100%;
@@ -103,6 +104,7 @@ const PRINT_CSS = `
 }
 @media screen {
   .print-only { display: none !important; }
+  .print-output { display: none !important; }
 }
 `;
 
@@ -257,10 +259,10 @@ function PrintCell({ item, gridSize }) {
       {isFree ? (
         <>
           <span style={{ position: "absolute", fontSize: 84, color: "#FFD700", lineHeight: 1, WebkitPrintColorAdjust: "exact", printColorAdjust: "exact" }}>★</span>
-          <div style={{ position: "relative", zIndex: 1, fontSize: 22, fontWeight: 700, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
+          <div style={{ position: "relative", zIndex: 1, fontSize: 20, fontWeight: 700, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
         </>
       ) : (
-        <div style={{ fontSize: 22, fontWeight: 600, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
+        <div style={{ fontSize: 20, fontWeight: 600, color: "#111", lineHeight: 1.2 }}>{item.name}</div>
       )}
     </div>
   );
@@ -619,13 +621,15 @@ export default function App() {
   };
 
   return (
-    <div style={{ minHeight: "100vh", background: "linear-gradient(165deg,#2C1810,#4A3728 40%,#3D2E1C)", fontFamily: F, color: "#FFF9EE" }}>
+    <>
       <style>{PRINT_CSS}</style>
-      <div style={{ position: "fixed", inset: 0, backgroundImage: "repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(255,255,255,0.015) 40px,rgba(255,255,255,0.015) 41px)", pointerEvents: "none" }} />
       {/* eslint-disable-next-line @next/next/no-page-custom-font */}
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Source+Sans+3:wght@300;400;600;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet" />
 
-      <div style={{ position: "relative", zIndex: 1 }}>
+      <div className="screen-wrapper" style={{ minHeight: "100vh", background: "linear-gradient(165deg,#2C1810,#4A3728 40%,#3D2E1C)", fontFamily: F, color: "#FFF9EE" }}>
+        <div style={{ position: "fixed", inset: 0, backgroundImage: "repeating-linear-gradient(0deg,transparent,transparent 40px,rgba(255,255,255,0.015) 40px,rgba(255,255,255,0.015) 41px)", pointerEvents: "none" }} />
+
+        <div style={{ position: "relative", zIndex: 1 }}>
 
         {/* ─── SETUP ─── */}
         {phase === "setup" && (
@@ -890,68 +894,6 @@ export default function App() {
               }} style={{ ...B2, color: "#C4982A", borderColor: "rgba(196,152,42,0.3)" }}>Make Corrections</button>
             </div>
 
-            {/* Print output */}
-            <div className="print-only">
-              {legs.length > 0 ? (
-                // Multi-leg print
-                legs.map((leg, li) => (
-                  <React.Fragment key={li}>
-                    {/* Divider page between legs */}
-                    {li > 0 && (
-                      <div className="print-page" style={{ alignItems: "center", justifyContent: "center" }}>
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 3, color: "#8B6914", marginBottom: 12 }}>Leg {li + 1}</div>
-                          <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 800, color: "#222" }}>{leg.label}</div>
-                          <div style={{ fontSize: 14, color: "#666", marginTop: 8 }}>{leg.from} → {leg.to}</div>
-                        </div>
-                      </div>
-                    )}
-                    {/* Leg blurb page */}
-                    {leg.blurb?.blurbs?.length > 0 && (
-                      <div className="print-page" style={{ padding: "0.5in", alignItems: "flex-start", justifyContent: "flex-start" }}>
-                        <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>
-                          Route Guide — {leg.label}
-                        </div>
-                        <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{leg.from} → {leg.to}</div>
-                        {leg.blurb.blurbs.map((b, i) => (
-                          <div key={i} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: i < leg.blurb.blurbs.length - 1 ? "1px solid #ddd" : "none" }}>
-                            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#8B6914", marginBottom: 6 }}>{b.leg}</div>
-                            <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7 }}>{b.description}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {/* Leg cards */}
-                    {leg.cards.map((card, ci) => (
-                      <PrintCardPage key={ci} card={card} gridSize={gridSize}
-                        fromLabel={leg.from} toLabel={leg.to}
-                        originFlagCode={leg.originFlagCode} destFlagCode={leg.destFlagCode} />
-                    ))}
-                  </React.Fragment>
-                ))
-              ) : (
-                // Single leg print
-                <>
-                  {blurb?.blurbs?.length > 0 && (
-                    <div className="print-page" style={{ padding: "0.5in", alignItems: "flex-start", justifyContent: "flex-start" }}>
-                      <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>Route Guide</div>
-                      <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{from} → {to}</div>
-                      {blurb.blurbs.map((b, i) => (
-                        <div key={i} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: i < blurb.blurbs.length - 1 ? "1px solid #ddd" : "none" }}>
-                          <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#8B6914", marginBottom: 6 }}>{b.leg}</div>
-                          <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7 }}>{b.description}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {cards.map((card, ci) => (
-                    <PrintCardPage key={ci} card={card} gridSize={gridSize}
-                      fromLabel={from} toLabel={to}
-                      originFlagCode={routeData?.origin_flag_code} destFlagCode={routeData?.destination_flag_code} />
-                  ))}
-                </>
-              )}
-            </div>
           </div>
         )}
 
@@ -1004,7 +946,69 @@ export default function App() {
             )}
           </div>
         )}
+        </div>
       </div>
-    </div>
+
+      {/* Print output — hidden on screen, visible in print */}
+      <div className="print-output">
+        {phase === "cards" && (
+          legs.length > 0 ? (
+            legs.map((leg, li) => (
+              <React.Fragment key={li}>
+                {/* Title page for every leg (including Leg 1) */}
+                <div className="print-page" style={{ alignItems: "center", justifyContent: "center" }}>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 3, color: "#8B6914", marginBottom: 12 }}>Leg {li + 1}</div>
+                    <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, fontWeight: 800, color: "#222" }}>{leg.label}</div>
+                    <div style={{ fontSize: 14, color: "#666", marginTop: 8 }}>{leg.from} → {leg.to}</div>
+                  </div>
+                </div>
+                {/* Leg blurb page */}
+                {leg.blurb?.blurbs?.length > 0 && (
+                  <div className="print-page" style={{ padding: "0.5in", alignItems: "flex-start", justifyContent: "flex-start" }}>
+                    <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>
+                      Route Guide — {leg.label}
+                    </div>
+                    <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{leg.from} → {leg.to}</div>
+                    {leg.blurb.blurbs.map((b, i) => (
+                      <div key={i} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: i < leg.blurb.blurbs.length - 1 ? "1px solid #ddd" : "none" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#8B6914", marginBottom: 6 }}>{b.leg}</div>
+                        <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7 }}>{b.description}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Leg cards */}
+                {leg.cards.map((card, ci) => (
+                  <PrintCardPage key={ci} card={card} gridSize={gridSize}
+                    fromLabel={leg.from} toLabel={leg.to}
+                    originFlagCode={leg.originFlagCode} destFlagCode={leg.destFlagCode} />
+                ))}
+              </React.Fragment>
+            ))
+          ) : (
+            <>
+              {blurb?.blurbs?.length > 0 && (
+                <div className="print-page" style={{ padding: "0.5in", alignItems: "flex-start", justifyContent: "flex-start" }}>
+                  <div style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 22, fontWeight: 700, color: "#333", marginBottom: 6 }}>Route Guide</div>
+                  <div style={{ fontSize: 13, color: "#666", marginBottom: 24 }}>{from} → {to}</div>
+                  {blurb.blurbs.map((b, i) => (
+                    <div key={i} style={{ marginBottom: 20, paddingBottom: 20, borderBottom: i < blurb.blurbs.length - 1 ? "1px solid #ddd" : "none" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, color: "#8B6914", marginBottom: 6 }}>{b.leg}</div>
+                      <div style={{ fontSize: 13, color: "#333", lineHeight: 1.7 }}>{b.description}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {cards.map((card, ci) => (
+                <PrintCardPage key={ci} card={card} gridSize={gridSize}
+                  fromLabel={from} toLabel={to}
+                  originFlagCode={routeData?.origin_flag_code} destFlagCode={routeData?.destination_flag_code} />
+              ))}
+            </>
+          )
+        )}
+      </div>
+    </>
   );
 }

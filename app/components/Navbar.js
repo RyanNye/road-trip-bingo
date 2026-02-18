@@ -37,7 +37,7 @@ export default function Navbar() {
   const [tripsOpen, setTripsOpen] = useState(false);
 
   return (
-    <nav style={{
+    <nav className="no-print" style={{
       background: "rgba(28,16,8,0.97)",
       borderBottom: "1px solid rgba(255,255,255,0.08)",
       padding: "0 clamp(16px,4vw,32px)",
