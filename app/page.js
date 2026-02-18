@@ -1,23 +1,9 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import dynamic from "next/dynamic";
 import AffiliateButtons from "@/app/components/AffiliateButtons";
-import PlaceInput from "@/app/components/PlaceInput";
+import RouteSetupMap from "@/app/components/RouteSetupMap";
 
-const RouteMap = dynamic(() => import("@/app/components/RouteMap"), {
-  ssr: false,
-  loading: () => (
-    <div style={{
-      width: "100%", height: 340, borderRadius: 12,
-      background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      color: "#6B5C48", fontSize: 14,
-    }}>
-      Loading map...
-    </div>
-  ),
-});
 
 /*
   ROAD TRIP BINGO — Claude-Powered
@@ -319,12 +305,10 @@ export default function App() {
   const [phase, setPhase] = useState("setup");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [detours, setDetours] = useState([]);
   const gridSize = 5;
   const [numCardsStr, setNumCardsStr] = useState("4");
   const [routeData, setRouteData] = useState(null);
-
-  const [waypoints, setWaypoints] = useState([]);
-  const [mapWaypoints, setMapWaypoints] = useState([]);
 
   const [customItems, setCustomItems] = useState([]);
   const [ciName, setCiName] = useState("");
@@ -339,7 +323,6 @@ export default function App() {
 
   const [blurb, setBlurb] = useState(null);
   const [returnBanner, setReturnBanner] = useState(null);
-  const [routeError, setRouteError] = useState(null);
   const [genError, setGenError] = useState(null);
 
   const [fb, setFb] = useState({});
@@ -357,14 +340,7 @@ export default function App() {
     (routeData.estimated_hours != null && routeData.estimated_hours > 5) ||
     (routeData.estimated_miles != null && routeData.estimated_miles > 300)
   );
-  if (routeData && phase === "route") {
-    console.log("[isLongRoute]", isLongRoute, {
-      estimated_hours: routeData.estimated_hours,
-      estimated_miles: routeData.estimated_miles,
-      hours_check: routeData.estimated_hours != null && routeData.estimated_hours > 5,
-      miles_check: routeData.estimated_miles != null && routeData.estimated_miles > 300,
-    });
-  }
+  const hasSuggestedLegs = routeData?.suggested_legs?.length > 1;
 
   // Derived active-leg data for the cards page
   const activeCards = legs.length > 0 ? (legs[activeLeg]?.cards || []) : cards;
@@ -384,45 +360,6 @@ export default function App() {
     if (params.get("to")) setTo(params.get("to"));
 
   }, []);
-
-  const planRoute = async (overrideWaypoints) => {
-    setRouteError(null);
-    setLegChoice(null);
-    setMapWaypoints([]);
-    setPhase("loading");
-    try {
-      const wps = overrideWaypoints ?? waypoints;
-      const res = await fetch("/api/analyze-route", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to, waypoints: wps }),
-      });
-      if (!res.ok) throw new Error("Route analysis failed");
-      const data = await res.json();
-      console.log("[planRoute] routeData received:", {
-        estimated_hours: data.estimated_hours,
-        estimated_miles: data.estimated_miles,
-        suggested_legs: data.suggested_legs,
-        isLongRoute: (
-          (data.estimated_hours != null && data.estimated_hours > 5) ||
-          (data.estimated_miles != null && data.estimated_miles > 300)
-        ),
-      });
-      setRouteData(data);
-      setPhase("route");
-    } catch (err) {
-      setRouteError(err.message);
-      setPhase("setup");
-    }
-  };
-
-  const handleLooksGood = () => {
-    if (mapWaypoints.length > 0) {
-      planRoute(mapWaypoints);
-    } else {
-      setPhase("custom");
-    }
-  };
 
   const addCustom = () => {
     if (!ciName.trim()) return;
@@ -600,9 +537,8 @@ export default function App() {
 
   const reset = () => {
     setPhase("setup"); setCards([]); setAllItems([]); setCustomItems([]);
-    setActiveCard(0); setWaypoints([]); setRouteData(null); setBlurb(null);
+    setActiveCard(0); setDetours([]); setRouteData(null); setBlurb(null);
     setLegs([]); setActiveLeg(0); setLegChoice(null); setFbNotes({});
-    setMapWaypoints([]);
   };
 
   const handleSubmitFeedback = async () => {
@@ -640,7 +576,7 @@ export default function App() {
 
         {/* ─── SETUP ─── */}
         {phase === "setup" && (
-          <div className="no-print" style={{ maxWidth: 480, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
+          <div className="no-print" style={{ maxWidth: 680, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
             {returnBanner && (
               <div style={{ marginBottom: 20, padding: 16, background: "rgba(196,152,42,0.08)", border: "1px solid rgba(196,152,42,0.2)", borderRadius: 12 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: "#C4982A", marginBottom: 8 }}>Welcome back! How was your {returnBanner.from} → {returnBanner.to} trip?</div>
@@ -650,21 +586,52 @@ export default function App() {
                 </div>
               </div>
             )}
-            <div style={{ marginBottom: 24 }}><label style={L}>Starting Point</label><PlaceInput style={IN} value={from} onChange={setFrom} placeholder="Chicago, IL" onKeyDown={(e) => e.key === "Enter" && from.trim() && to.trim() && planRoute()} /></div>
-            <div style={{ textAlign: "center", margin: "4px 0", color: "#6B5C48", fontSize: 20 }}>↓</div>
-            <div style={{ marginBottom: 28 }}><label style={L}>Destination</label><PlaceInput style={IN} value={to} onChange={setTo} placeholder="Santa Monica, CA" onKeyDown={(e) => e.key === "Enter" && from.trim() && to.trim() && planRoute()} /></div>
-            <div style={{ marginBottom: 32 }}>
+
+            <RouteSetupMap
+              from={from}
+              to={to}
+              detours={detours}
+              setFrom={setFrom}
+              setTo={setTo}
+              setDetours={setDetours}
+              onRouteChange={setRouteData}
+            />
+
+            {routeData && (
+              <div style={{ marginTop: 16, ...BOX }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 4 }}>Route</div>
+                    <div style={{ fontSize: 16, fontWeight: 700 }}>{routeData.route_name}</div>
+                  </div>
+                  <div style={{ display: "flex", gap: 20 }}>
+                    {routeData.estimated_miles != null && (
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: "#C4982A" }}>{routeData.estimated_miles}</div>
+                        <div style={{ fontSize: 11, color: "#6B5C48", textTransform: "uppercase", letterSpacing: 1 }}>miles</div>
+                      </div>
+                    )}
+                    {routeData.estimated_hours != null && (
+                      <div style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: "#C4982A" }}>{routeData.estimated_hours}</div>
+                        <div style={{ fontSize: 11, color: "#6B5C48", textTransform: "uppercase", letterSpacing: 1 }}>hrs</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 16, marginBottom: 16 }}>
               <label style={L}>How many cards?</label>
               <input type="text" inputMode="numeric" style={IN}
                 value={numCardsStr} onChange={(e) => setNumCardsStr(e.target.value)} placeholder="1-20" />
             </div>
-            <button onClick={() => planRoute()} disabled={!from.trim() || !to.trim()} style={B1(!from.trim() || !to.trim())}>Plan My Route</button>
-            {routeError && (
-              <div style={{ marginTop: 16, padding: 16, background: "rgba(224,107,143,0.08)", border: "1px solid rgba(224,107,143,0.2)", borderRadius: 10, color: "#E06B8F", fontSize: 14 }}>
-                Could not analyze this route. Check your city names and try again.
-                <button onClick={() => planRoute()} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
-              </div>
-            )}
+
+            <button onClick={() => setPhase("custom")} disabled={!routeData} style={B1(!routeData)}>
+              Next: Add Items →
+            </button>
+
             <div style={{ marginTop: 24, padding: 16, background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "#C4982A", marginBottom: 4 }}>💡 Pro tip</div>
               <div style={{ fontSize: 13, color: "#8B7355", lineHeight: 1.5 }}>Whoever gets BINGO first earns a head start on tonight&#39;s board game, first pick of hotel beds, or choice of restaurant!</div>
@@ -672,108 +639,6 @@ export default function App() {
           </div>
         )}
 
-        {/* ─── LOADING ─── */}
-        {phase === "loading" && (
-          <div className="no-print" style={{ maxWidth: 480, margin: "0 auto", padding: "80px 24px", textAlign: "center" }}>
-            <div style={{ width: 56, height: 56, margin: "0 auto 20px", borderRadius: "50%", border: "3px solid rgba(196,152,42,0.2)", borderTopColor: "#C4982A", animation: "spin 1s linear infinite" }} />
-            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-            <div style={{ fontFamily: SF, fontSize: 20, fontWeight: 700 }}>Analyzing your route...</div>
-            <div style={{ fontSize: 13, color: "#6B5C48", marginTop: 8 }}>{from} → {to}</div>
-          </div>
-        )}
-
-        {/* ─── ROUTE CONFIRM ─── */}
-        {phase === "route" && (
-          <div className="no-print" style={{ maxWidth: 680, margin: "0 auto", padding: "32px clamp(12px,4vw,24px)", width: "100%", boxSizing: "border-box" }}>
-            <div style={{ textAlign: "center", marginBottom: 24 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 2, color: "#C4982A", marginBottom: 8 }}>Confirm Your Route</div>
-              <div style={{ fontFamily: SF, fontSize: 24, fontWeight: 700 }}>{from} → {to}</div>
-              <div style={{ fontSize: 13, color: "#6B5C48", marginTop: 4 }}>Drag the route to adjust your path</div>
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <RouteMap
-                from={from}
-                to={to}
-                routeCoords={routeData?.route_coordinates || []}
-                onWaypointsChange={setMapWaypoints}
-              />
-              {mapWaypoints.length > 0 && (
-                <div style={{ marginTop: 10 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 1.5, color: "#A89270", marginBottom: 6 }}>Via your adjusted route</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {mapWaypoints.map((wp, i) => (
-                      <div key={i} style={{ background: "rgba(196,152,42,0.1)", border: "1px solid rgba(196,152,42,0.3)", borderRadius: 100, padding: "4px 12px", fontSize: 13, color: "#C4982A" }}>
-                        {wp}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div style={BOX}>
-              <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 6 }}>Route</div>
-              <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>{routeData?.route_name}</div>
-              <div style={{ fontSize: 14, color: "#8B7355", lineHeight: 1.5 }}>{routeData?.route_summary}</div>
-            </div>
-            <div style={BOX}>
-              <div style={{ fontSize: 12, color: "#A89270", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>Passing Through</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {routeData?.major_waypoints.map((wp, i) => (
-                  <div key={i} style={{ background: "rgba(196,152,42,0.1)", border: "1px solid rgba(196,152,42,0.25)", borderRadius: 100, padding: "6px 14px", fontSize: 13, fontWeight: 600, color: "#C4982A" }}>{wp.name}, {wp.country}</div>
-                ))}
-              </div>
-            </div>
-            <div style={{ ...BOX, background: "rgba(196,152,42,0.06)", borderColor: "rgba(196,152,42,0.15)" }}>
-              <div style={{ fontSize: 12, color: "#C4982A", fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>⭐ Notable Highway Landmarks</div>
-              {routeData?.notable_highway_landmarks.map((lm, i) => (
-                <div key={i} style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.5, padding: "6px 0", borderBottom: i < routeData?.notable_highway_landmarks.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>{lm}</div>
-              ))}
-            </div>
-
-            {/* Long trip prompt */}
-            {isLongRoute && (
-              <div style={{ ...BOX, background: "rgba(196,152,42,0.06)", borderColor: "rgba(196,152,42,0.2)" }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#C4982A", marginBottom: 6 }}>🗺️ This is a long trip!</div>
-                <div style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.6, marginBottom: 12 }}>
-                  About{routeData.estimated_hours != null ? ` ${Math.round(routeData.estimated_hours)} hrs` : ""}
-                  {routeData.estimated_miles != null ? ` / ${Math.round(routeData.estimated_miles)} mi` : ""} of driving.
-                  Want separate bingo cards and route guides for each stretch?
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setLegChoice("split")} style={{
-                    flex: 1, padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F,
-                    background: legChoice === "split" ? "rgba(196,152,42,0.2)" : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${legChoice === "split" ? "rgba(196,152,42,0.5)" : "rgba(255,255,255,0.12)"}`,
-                    color: legChoice === "split" ? "#C4982A" : "#A89270",
-                  }}>
-                    ✓ Yes, split into legs
-                  </button>
-                  <button onClick={() => setLegChoice("keep")} style={{
-                    flex: 1, padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F,
-                    background: legChoice === "keep" ? "rgba(196,152,42,0.2)" : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${legChoice === "keep" ? "rgba(196,152,42,0.5)" : "rgba(255,255,255,0.12)"}`,
-                    color: legChoice === "keep" ? "#C4982A" : "#A89270",
-                  }}>
-                    No, one set of cards
-                  </button>
-                </div>
-              </div>
-            )}
-
-            <div style={{ display: "flex", gap: 12 }}>
-              <button onClick={reset} style={{ ...B2, flex: 1, padding: 14 }}>← Back</button>
-              <button
-                onClick={handleLooksGood}
-                disabled={isLongRoute && !legChoice}
-                style={{ ...B1(isLongRoute && !legChoice), flex: 2 }}
-              >
-                {mapWaypoints.length > 0
-                  ? "Apply Route Adjustments →"
-                  : "Looks Good — Next →"}
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* ─── CUSTOM ITEMS ─── */}
         {phase === "custom" && (
@@ -802,15 +667,44 @@ export default function App() {
                 <button onClick={addCustom} disabled={!ciName.trim()} style={{ ...B2, padding: "8px 18px", opacity: ciName.trim() ? 1 : 0.4, color: ciName.trim() ? "#C4982A" : "#6B5C48" }}>Add</button>
               </div>
             </div>
+            {/* Long trip prompt */}
+            {isLongRoute && hasSuggestedLegs && (
+              <div style={{ ...BOX, background: "rgba(196,152,42,0.06)", borderColor: "rgba(196,152,42,0.2)", marginBottom: 16 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#C4982A", marginBottom: 6 }}>🗺️ This is a long trip!</div>
+                <div style={{ fontSize: 13, color: "#D4C5A9", lineHeight: 1.6, marginBottom: 12 }}>
+                  About{routeData.estimated_hours != null ? ` ${Math.round(routeData.estimated_hours)} hrs` : ""}
+                  {routeData.estimated_miles != null ? ` / ${Math.round(routeData.estimated_miles)} mi` : ""} of driving.
+                  Want separate bingo cards and route guides for each stretch?
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setLegChoice("split")} style={{
+                    flex: 1, padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F,
+                    background: legChoice === "split" ? "rgba(196,152,42,0.2)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${legChoice === "split" ? "rgba(196,152,42,0.5)" : "rgba(255,255,255,0.12)"}`,
+                    color: legChoice === "split" ? "#C4982A" : "#A89270",
+                  }}>
+                    ✓ Yes, split into legs
+                  </button>
+                  <button onClick={() => setLegChoice("keep")} style={{
+                    flex: 1, padding: "10px 14px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: F,
+                    background: legChoice === "keep" ? "rgba(196,152,42,0.2)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${legChoice === "keep" ? "rgba(196,152,42,0.5)" : "rgba(255,255,255,0.12)"}`,
+                    color: legChoice === "keep" ? "#C4982A" : "#A89270",
+                  }}>
+                    No, one set of cards
+                  </button>
+                </div>
+              </div>
+            )}
             {genError && (
               <div style={{ marginBottom: 16, padding: 16, background: "rgba(224,107,143,0.08)", border: "1px solid rgba(224,107,143,0.2)", borderRadius: 10, color: "#E06B8F", fontSize: 14 }}>
                 {genError}
                 <button onClick={generate} style={{ ...B2, marginTop: 8, width: "100%" }}>Retry</button>
               </div>
             )}
-            <button onClick={generate} style={B1(false)}>Generate {Math.min(20, Math.max(1, parseInt(numCardsStr) || 4))} Card{Math.min(20, Math.max(1, parseInt(numCardsStr) || 4)) !== 1 ? "s" : ""} 🎲</button>
+            <button onClick={generate} disabled={isLongRoute && hasSuggestedLegs && !legChoice} style={B1(isLongRoute && hasSuggestedLegs && !legChoice)}>Generate {Math.min(20, Math.max(1, parseInt(numCardsStr) || 4))} Card{Math.min(20, Math.max(1, parseInt(numCardsStr) || 4)) !== 1 ? "s" : ""} 🎲</button>
             <div style={{ textAlign: "center", marginTop: 12 }}>
-              <button onClick={() => setPhase("route")} style={{ background: "none", border: "none", color: "#6B5C48", cursor: "pointer", fontSize: 13 }}>← Back to route</button>
+              <button onClick={() => setPhase("setup")} style={{ background: "none", border: "none", color: "#6B5C48", cursor: "pointer", fontSize: 13 }}>← Back</button>
             </div>
             {customItems.length === 0 && (
               <div style={{ marginTop: 20, padding: "14px 16px", background: "rgba(255,255,255,0.03)", borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
@@ -827,7 +721,7 @@ export default function App() {
             <div style={{ width: 56, height: 56, margin: "0 auto 20px", borderRadius: "50%", border: "3px solid rgba(196,152,42,0.2)", borderTopColor: "#C4982A", animation: "spin 1s linear infinite" }} />
             <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
             <div style={{ fontFamily: SF, fontSize: 20, fontWeight: 700, marginBottom: 8 }}>{loadMsg}</div>
-            <div style={{ fontSize: 13, color: "#6B5C48", marginBottom: 20 }}>{from} → {to} via {routeData?.route_name}</div>
+            <div style={{ fontSize: 13, color: "#6B5C48", marginBottom: 20 }}>{from} → {to}</div>
             <div style={{ width: "100%", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2, overflow: "hidden" }}>
               <div style={{ width: `${progress}%`, height: "100%", background: "linear-gradient(90deg,#8B6914,#C4982A)", transition: "width 0.3s" }} />
             </div>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { askClaude } from "../../../lib/claude.js";
-import { getRouteItems, getItemsNearRoute, saveGeneratedItems } from "../../../lib/db.js";
+import { findOrCreateRoute, getRouteItems, getItemsNearRoute, saveGeneratedItems } from "../../../lib/db.js";
 import { GENERATE_ITEMS_SYSTEM, generateItemsUserPrompt } from "../../../lib/prompts.js";
 
 const TARGET_ITEMS = 32;
@@ -10,31 +10,44 @@ export async function POST(request) {
     const { route_name, route_summary, major_waypoints, route_coordinates, from, to, _routeId } =
       await request.json();
 
-    // Step 1: Try to get items already saved for this route
-    let dbItems = [];
-    if (_routeId) {
-      dbItems = await getRouteItems(_routeId);
+    // Step 1: Resolve routeId — use provided _routeId or find/create from from+to
+    let routeId = _routeId || null;
+    if (!routeId && from && to) {
+      try {
+        const route = await findOrCreateRoute({
+          from,
+          to,
+          routeAnalysis: { route_name, route_summary, route_coordinates },
+        });
+        routeId = route.id;
+      } catch (e) {
+        console.warn("[generate-items] findOrCreateRoute failed:", e.message);
+      }
     }
 
-    // Step 2: If no route-specific items, try geo-matching across all items
+    // Step 2: Try to get items already saved for this route
+    let dbItems = [];
+    if (routeId) {
+      dbItems = await getRouteItems(routeId);
+    }
+
+    // Step 3: If no route-specific items, try geo-matching across all items
     if (dbItems.length === 0 && route_coordinates?.length) {
       dbItems = await getItemsNearRoute(route_coordinates, 20);
     }
 
-    // Step 3: Calculate how many more items Claude needs to generate
-    const existingCount = dbItems.length;
-    const needed = Math.max(0, TARGET_ITEMS - existingCount);
+    // Step 4: Calculate how many more items Claude needs to generate
+    const needed = Math.max(0, TARGET_ITEMS - dbItems.length);
 
     let claudeItems = [];
     if (needed > 0) {
-      const existingItemNames = dbItems.map((i) => i.name);
       const userPrompt = generateItemsUserPrompt({
         route_name,
         route_summary,
         major_waypoints,
         from,
         to,
-        existingItemNames,
+        existingItemNames: dbItems.map((i) => i.name),
         count: needed,
       });
 
@@ -42,17 +55,13 @@ export async function POST(request) {
 
       if (result?.items && Array.isArray(result.items)) {
         claudeItems = result.items;
-
-        // Save AI-generated items back to DB for this route
-        if (_routeId) {
-          await saveGeneratedItems(_routeId, claudeItems);
+        if (routeId) {
+          await saveGeneratedItems(routeId, claudeItems);
         }
       }
     }
 
-    const allItems = [...dbItems, ...claudeItems];
-
-    return NextResponse.json({ items: allItems });
+    return NextResponse.json({ items: [...dbItems, ...claudeItems], _routeId: routeId });
   } catch (error) {
     console.error("generate-items error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
