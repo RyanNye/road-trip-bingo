@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import AffiliateButtons from "@/app/components/AffiliateButtons";
 
 const SF = "'Playfair Display', Georgia, serif";
 const F  = "'Source Sans 3', system-ui, sans-serif";
@@ -214,6 +215,8 @@ export default async function RoutesIndex() {
             );
           })}
         </div>
+
+        <AffiliateButtons />
 
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
+import AffiliateButtons from "@/app/components/AffiliateButtons";
 
 // ── Shared styles (matching main app) ──────────────────────────
 const SF = "'Playfair Display', Georgia, serif";
@@ -245,33 +246,7 @@ export default async function RoutePage({ params }) {
         </section>
 
         {/* ── Amazon Associates ── */}
-        <section style={{ paddingTop: 40, paddingBottom: 40, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <h2 style={{ fontFamily: SF, fontSize: 22, fontWeight: 700, margin: "0 0 4px", color: "#FFF9EE" }}>
-            Road Trip Essentials
-          </h2>
-          <p style={{ fontSize: 13, color: "#6B5C48", margin: "0 0 20px" }}>
-            Everything you need for the {fromCity} → {toCity} drive
-          </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
-            {[
-              { emoji: "🎮", label: "Travel Games" },
-              { emoji: "🍫", label: "Road Trip Snacks" },
-              { emoji: "🔋", label: "Portable Charger" },
-              { emoji: "🎵", label: "Bluetooth Speaker" },
-              { emoji: "🗺️", label: "Road Atlas" },
-              { emoji: "🧴", label: "Car Comfort Kit" },
-            ].map((item, i) => (
-              <div key={i} style={{ background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 10, padding: "18px 12px", textAlign: "center" }}>
-                <div style={{ fontSize: 26, marginBottom: 8 }}>{item.emoji}</div>
-                <div style={{ fontSize: 13, color: "#8B7355", fontWeight: 600, marginBottom: 6 }}>{item.label}</div>
-                <div style={{ fontSize: 11, color: "#4A3728" }}>coming soon</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop: 14, fontSize: 11, color: "#4A3728", fontStyle: "italic" }}>
-            As an Amazon Associate, Highway Bingo earns from qualifying purchases.
-          </div>
-        </section>
+        <AffiliateButtons />
 
         {/* ── Footer ── */}
         <div style={{ paddingTop: 40, paddingBottom: 52, textAlign: "center" }}>

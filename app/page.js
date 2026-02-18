@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import AffiliateButtons from "@/app/components/AffiliateButtons";
 
 /*
   ROAD TRIP BINGO — Claude-Powered
@@ -962,8 +963,11 @@ export default function App() {
               </div>
             )}
 
+            {/* Affiliate buttons */}
+            <div className="no-print"><AffiliateButtons /></div>
+
             {/* Bottom buttons */}
-            <div className="no-print" style={{ maxWidth: 560, margin: "24px auto 0", width: "100%", display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <div className="no-print" style={{ maxWidth: 560, margin: "8px auto 0", width: "100%", display: "flex", justifyContent: "space-between", gap: 12 }}>
               <button onClick={reset} style={B2}>← New Route</button>
               <button onClick={() => {
                 const fbItems = legs.length > 0 ? legs.flatMap((l) => l.allItems) : allItems;
