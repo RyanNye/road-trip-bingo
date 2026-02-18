@@ -611,11 +611,6 @@ export default function App() {
       <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800;900&family=Source+Sans+3:wght@300;400;600;700&family=Libre+Baskerville:wght@400;700&display=swap" rel="stylesheet" />
 
       <div style={{ position: "relative", zIndex: 1 }}>
-        {/* Header */}
-        <header className="no-print" style={{ padding: "32px 24px 20px", textAlign: "center", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <h1 style={{ fontFamily: SF, fontSize: "clamp(30px,6vw,48px)", fontWeight: 900, margin: 0, lineHeight: 1.2, paddingBottom: "0.1em", background: "linear-gradient(180deg,#FFF9EE,#D4C5A9)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", display: "inline-block" }}>Highway Bingo</h1>
-          <p style={{ fontSize: 14, color: "#A89270", marginTop: 8, fontStyle: "italic" }}>Turn your roadtrip into an adventure</p>
-        </header>
 
         {/* ─── SETUP ─── */}
         {phase === "setup" && (

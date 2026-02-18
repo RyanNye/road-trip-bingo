@@ -36,9 +36,6 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [tripsOpen, setTripsOpen] = useState(false);
 
-  // Homepage has its own header
-  if (pathname === "/") return null;
-
   return (
     <nav style={{
       background: "rgba(28,16,8,0.97)",
