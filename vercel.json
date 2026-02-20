@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/update-rankings",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/crawl-places",
+      "schedule": "0 8 * * *"
     }
   ]
 }

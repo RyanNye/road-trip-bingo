@@ -58,11 +58,11 @@ if (!MAPS_KEY) { console.error("Missing GOOGLE_MAPS_KEY"); process.exit(1); }
 // CONFIG
 // ================================================================
 
-const DAILY_LIMIT           = 200;  // Places API calls per day (fits $200 GCP free tier)
-const SAMPLE_INTERVAL_KM    = 30;   // km between polyline sample points
+const DAILY_LIMIT           = 190;  // Places API calls per day (safety buffer under GCP free tier)
+const SAMPLE_INTERVAL_KM    = 15;   // km between polyline sample points
 const SEARCH_RADIUS_M       = 25000; // 25 km radius per Places search
 const MIN_RATING            = 3.5;  // filter out low-rated places
-const VISIBLE_DIST_KM      = 2.01; // 1.25 miles — bingo-eligible, visible_from_highway = true
+const VISIBLE_DIST_KM      = 1.2;  // 0.75 miles — bingo-eligible, visible_from_highway = true
 const TRIVIA_DIST_KM       = 16.1; // 10 miles — stored for trivia/blurbs, visible_from_highway = false
 const GENERIC_CLUSTER_MIN  = 3;    // 3+ of same type in one window → aggregate
 const GENERIC_CLUSTER_KM   = 48;   // 30-mile window for clustering
@@ -81,73 +81,93 @@ const REGIONAL_BUDGET = {
 // ================================================================
 
 const ROUTES = [
-  // North America — US interstates
-  { label: "I-95 Houlton to Miami",            from: "Houlton, ME",                     to: "Miami, FL",                             region: "north_america" },
-  { label: "I-75 Sault Ste Marie to Miami",    from: "Sault Ste Marie, MI",             to: "Miami, FL",                             region: "north_america" },
-  { label: "I-10 Jacksonville to Santa Monica",from: "Jacksonville, FL",                to: "Santa Monica, CA",                      region: "north_america" },
-  { label: "I-5 Blaine to San Diego",          from: "Blaine, WA",                      to: "San Diego, CA",                         region: "north_america" },
-  { label: "I-40 Wilmington to Barstow",       from: "Wilmington, NC",                  to: "Barstow, CA",                           region: "north_america" },
-  { label: "I-35 Duluth to Laredo",            from: "Duluth, MN",                      to: "Laredo, TX",                            region: "north_america" },
-  { label: "I-80 Teaneck to San Francisco",    from: "Teaneck, NJ",                     to: "San Francisco, CA",                     region: "north_america" },
-  { label: "I-90 Boston to Seattle",           from: "Boston, MA",                      to: "Seattle, WA",                           region: "north_america" },
-  { label: "I-85 Petersburg to Montgomery",    from: "Petersburg, VA",                  to: "Montgomery, AL",                        region: "north_america" },
-  { label: "I-65 Gary to Mobile",              from: "Gary, IN",                        to: "Mobile, AL",                            region: "north_america" },
-  { label: "I-70 Baltimore to Cove Fort",      from: "Baltimore, MD",                   to: "Cove Fort, UT",                         region: "north_america" },
-  { label: "I-81 Dandridge to Watertown",      from: "Dandridge, TN",                   to: "Watertown, NY",                         region: "north_america" },
-  { label: "I-26 Kingsport to Charleston",     from: "Kingsport, TN",                   to: "Charleston, SC",                        region: "north_america" },
-  { label: "Pittsboro to Charleston",          from: "Pittsboro, NC",                   to: "Charleston, SC",                        region: "north_america" },
-  { label: "Pittsboro to Richmond",            from: "Pittsboro, NC",                   to: "Richmond, VA",                          region: "north_america" },
-  { label: "I-15 Sweet Grass to San Diego",    from: "Sweet Grass, MT",                 to: "San Diego, CA",                         region: "north_america" },
-  { label: "I-55 Chicago to La Place",         from: "Chicago, IL",                     to: "La Place, LA",                          region: "north_america" },
-  { label: "I-20 Florence to Kent",            from: "Florence, SC",                    to: "Kent, TX",                              region: "north_america" },
-  { label: "I-4 Daytona to Tampa",             from: "Daytona Beach, FL",               to: "Tampa, FL",                             region: "north_america" },
-  { label: "I-64 Norfolk to St Louis",         from: "Norfolk, VA",                     to: "St. Louis, MO",                         region: "north_america" },
-  // North America — Canada
-  { label: "Trans-Canada Victoria to St Johns",from: "Victoria, BC, Canada",            to: "St. John's, NL, Canada",                region: "north_america" },
-  { label: "Hwy 401 Windsor to Montreal",      from: "Windsor, ON, Canada",             to: "Montreal, QC, Canada",                  region: "north_america" },
-  { label: "Sea-to-Sky Vancouver to Whistler", from: "Vancouver, BC, Canada",           to: "Whistler, BC, Canada",                  region: "north_america" },
-  { label: "Hwy 400 Toronto to Sudbury",       from: "Toronto, ON, Canada",             to: "Sudbury, ON, Canada",                   region: "north_america" },
-  // North America — Mexico
-  { label: "Hwy 307 Cancun to Tulum",          from: "Cancun, Mexico",                  to: "Tulum, Mexico",                         region: "north_america" },
-  { label: "Hwy 15 Nogales to Mazatlan",       from: "Nogales, Mexico",                 to: "Mazatlan, Mexico",                      region: "north_america" },
-  // Europe
-  { label: "A1 Milan to Naples",               from: "Milan, Italy",                    to: "Naples, Italy",                         region: "europe" },
-  { label: "Paris to Berlin",                  from: "Paris, France",                   to: "Berlin, Germany",                       region: "europe" },
-  { label: "London to Edinburgh",              from: "London, England",                 to: "Edinburgh, Scotland",                   region: "europe" },
-  { label: "Barcelona to Malaga",              from: "Barcelona, Spain",                to: "Malaga, Spain",                         region: "europe" },
-  { label: "Hamburg to Munich",                from: "Hamburg, Germany",                to: "Munich, Germany",                       region: "europe" },
-  { label: "Paris to Marseille",               from: "Paris, France",                   to: "Marseille, France",                     region: "europe" },
-  { label: "Lisbon to Porto",                  from: "Lisbon, Portugal",                to: "Porto, Portugal",                       region: "europe" },
-  { label: "Split to Dubrovnik",               from: "Split, Croatia",                  to: "Dubrovnik, Croatia",                    region: "europe" },
-  { label: "Salzburg to Munich",               from: "Salzburg, Austria",               to: "Munich, Germany",                       region: "europe" },
-  { label: "Amsterdam to Frankfurt",           from: "Amsterdam, Netherlands",          to: "Frankfurt, Germany",                    region: "europe" },
-  { label: "Faro to Lisbon",                   from: "Faro, Portugal",                  to: "Lisbon, Portugal",                      region: "europe" },
-  { label: "Malmo to Oslo",                    from: "Malmö, Sweden",                   to: "Oslo, Norway",                          region: "europe" },
-  { label: "Wurzburg to Fussen Romantic Road", from: "Würzburg, Germany",               to: "Füssen, Germany",                       region: "europe" },
-  // Australia
-  { label: "Sydney to Brisbane",               from: "Sydney, NSW, Australia",          to: "Brisbane, QLD, Australia",              region: "australia" },
-  { label: "Melbourne to Sydney",              from: "Melbourne, VIC, Australia",       to: "Sydney, NSW, Australia",                region: "australia" },
-  { label: "Great Ocean Road",                 from: "Torquay, VIC, Australia",         to: "Allansford, VIC, Australia",            region: "australia" },
-  { label: "Sydney to Melbourne Inland",       from: "Sydney, NSW, Australia",          to: "Melbourne, VIC, Australia",             region: "australia" },
-  { label: "Brisbane to Cairns",               from: "Brisbane, QLD, Australia",        to: "Cairns, QLD, Australia",                region: "australia" },
-  // Southern Africa
-  { label: "Cape Town Garden Route to PE",     from: "Cape Town, South Africa",         to: "Port Elizabeth, South Africa",          region: "southern_africa" },
-  { label: "Johannesburg to Cape Town",        from: "Johannesburg, South Africa",      to: "Cape Town, South Africa",               region: "southern_africa" },
-  { label: "Johannesburg to Kruger",           from: "Johannesburg, South Africa",      to: "Kruger National Park, South Africa",    region: "southern_africa" },
-  { label: "Windhoek to Swakopmund",           from: "Windhoek, Namibia",               to: "Swakopmund, Namibia",                   region: "southern_africa" },
-  // East Asia
-  { label: "Tokyo to Osaka",                   from: "Tokyo, Japan",                    to: "Osaka, Japan",                          region: "east_asia" },
-  { label: "Seoul to Busan",                   from: "Seoul, South Korea",              to: "Busan, South Korea",                    region: "east_asia" },
-  { label: "Taipei to Kenting",                from: "Taipei, Taiwan",                  to: "Kenting, Taiwan",                       region: "east_asia" },
-  // Other
-  { label: "Auckland to Wellington",           from: "Auckland, New Zealand",           to: "Wellington, New Zealand",               region: "other" },
-  { label: "Milford Road Te Anau to Milford",  from: "Te Anau, New Zealand",            to: "Milford Sound, New Zealand",            region: "other" },
-  { label: "Queenstown to Franz Josef",        from: "Queenstown, New Zealand",         to: "Franz Josef, New Zealand",              region: "other" },
-  { label: "San Jose to Guanacaste",           from: "San Jose, Costa Rica",            to: "Liberia, Costa Rica",                   region: "other" },
-  { label: "San Jose to Manuel Antonio",       from: "San Jose, Costa Rica",            to: "Manuel Antonio, Costa Rica",            region: "other" },
-  { label: "El Calafate to El Chalten",        from: "El Calafate, Argentina",          to: "El Chalten, Argentina",                 region: "other" },
-  { label: "Santiago to Valparaiso",           from: "Santiago, Chile",                 to: "Valparaíso, Chile",                     region: "other" },
-  { label: "Antalya to Fethiye",               from: "Antalya, Turkey",                 to: "Fethiye, Turkey",                       region: "other" },
+  // ── US Interstates ──────────────────────────────────────────────────────────
+  { label: "I-95 Houlton to Miami",              from: "Houlton, ME",                   to: "Miami, FL",                            region: "north_america" },
+  { label: "I-75 Sault Ste Marie to Miami",      from: "Sault Ste Marie, MI",           to: "Miami, FL",                            region: "north_america" },
+  { label: "I-10 Jacksonville to Santa Monica",  from: "Jacksonville, FL",              to: "Santa Monica, CA",                     region: "north_america" },
+  { label: "I-5 Blaine to San Ysidro",           from: "Blaine, WA",                    to: "San Ysidro, CA",                       region: "north_america" },
+  { label: "I-40 Wilmington to Barstow",         from: "Wilmington, NC",                to: "Barstow, CA",                          region: "north_america" },
+  { label: "I-35 Duluth to Laredo",              from: "Duluth, MN",                    to: "Laredo, TX",                           region: "north_america" },
+  { label: "I-80 Teaneck to San Francisco",      from: "Teaneck, NJ",                   to: "San Francisco, CA",                    region: "north_america" },
+  { label: "I-90 Boston to Seattle",             from: "Boston, MA",                    to: "Seattle, WA",                          region: "north_america" },
+  { label: "I-85 Petersburg to Montgomery",      from: "Petersburg, VA",                to: "Montgomery, AL",                       region: "north_america" },
+  { label: "I-65 Gary to Mobile",                from: "Gary, IN",                      to: "Mobile, AL",                           region: "north_america" },
+  { label: "I-70 Baltimore to Cove Fort",        from: "Baltimore, MD",                 to: "Cove Fort, UT",                        region: "north_america" },
+  { label: "I-81 Dandridge to Watertown",        from: "Dandridge, TN",                 to: "Watertown, NY",                        region: "north_america" },
+  { label: "I-77 Cleveland to Columbia",         from: "Cleveland, OH",                 to: "Columbia, SC",                         region: "north_america" },
+  { label: "I-26 Kingsport to Charleston",       from: "Kingsport, TN",                 to: "Charleston, SC",                       region: "north_america" },
+  { label: "I-4 Daytona to Tampa",               from: "Daytona Beach, FL",             to: "Tampa, FL",                            region: "north_america" },
+  { label: "I-64 Norfolk to St Louis",           from: "Norfolk, VA",                   to: "St. Louis, MO",                        region: "north_america" },
+  { label: "I-20 Florence to Kent",              from: "Florence, SC",                  to: "Kent, TX",                             region: "north_america" },
+  { label: "I-24 Chattanooga to Paducah",        from: "Chattanooga, TN",               to: "Paducah, KY",                          region: "north_america" },
+  { label: "I-15 Sweet Grass to San Diego",      from: "Sweet Grass, MT",               to: "San Diego, CA",                        region: "north_america" },
+  { label: "I-55 Chicago to LaPlace",            from: "Chicago, IL",                   to: "LaPlace, LA",                          region: "north_america" },
+  // ── Canada ───────────────────────────────────────────────────────────────────
+  { label: "Trans-Canada Victoria to St Johns",  from: "Victoria, BC, Canada",          to: "St. John's, NL, Canada",               region: "north_america" },
+  { label: "Hwy 401 Windsor to Montreal",        from: "Windsor, ON, Canada",           to: "Montreal, QC, Canada",                 region: "north_america" },
+  { label: "Hwy 400 Toronto to Sudbury",         from: "Toronto, ON, Canada",           to: "Sudbury, ON, Canada",                  region: "north_america" },
+  { label: "Hwy 417 Ottawa to Montreal",         from: "Ottawa, ON, Canada",            to: "Montreal, QC, Canada",                 region: "north_america" },
+  { label: "Sea-to-Sky Vancouver to Whistler",   from: "Vancouver, BC, Canada",         to: "Whistler, BC, Canada",                 region: "north_america" },
+  // ── Mexico ────────────────────────────────────────────────────────────────────
+  { label: "Hwy 15 Nogales to Mazatlan",         from: "Nogales, Mexico",               to: "Mazatlán, Mexico",                     region: "north_america" },
+  { label: "Hwy 307 Cancun to Tulum",            from: "Cancún, Mexico",                to: "Tulum, Mexico",                        region: "north_america" },
+  { label: "Hwy 200 Puerto Vallarta to Acapulco",from: "Puerto Vallarta, Mexico",       to: "Acapulco, Mexico",                     region: "north_america" },
+  // ── Europe ────────────────────────────────────────────────────────────────────
+  { label: "A1 Milan to Naples",                 from: "Milan, Italy",                  to: "Naples, Italy",                        region: "europe" },
+  { label: "Paris to Berlin",                    from: "Paris, France",                 to: "Berlin, Germany",                      region: "europe" },
+  { label: "London to Edinburgh",                from: "London, England",               to: "Edinburgh, Scotland",                  region: "europe" },
+  { label: "AP-7 Barcelona to Malaga",           from: "Barcelona, Spain",              to: "Málaga, Spain",                        region: "europe" },
+  { label: "Hamburg to Munich",                  from: "Hamburg, Germany",              to: "Munich, Germany",                      region: "europe" },
+  { label: "Malmo to Oslo",                      from: "Malmö, Sweden",                 to: "Oslo, Norway",                         region: "europe" },
+  { label: "Paris to Marseille",                 from: "Paris, France",                 to: "Marseille, France",                    region: "europe" },
+  { label: "Romantic Road Wurzburg to Fussen",   from: "Würzburg, Germany",             to: "Füssen, Germany",                      region: "europe" },
+  { label: "A1 Lisbon to Porto",                 from: "Lisbon, Portugal",              to: "Porto, Portugal",                      region: "europe" },
+  { label: "Faro to Lisbon",                     from: "Faro, Portugal",                to: "Lisbon, Portugal",                     region: "europe" },
+  { label: "Split to Dubrovnik",                 from: "Split, Croatia",                to: "Dubrovnik, Croatia",                   region: "europe" },
+  { label: "Salzburg to Munich",                 from: "Salzburg, Austria",             to: "Munich, Germany",                      region: "europe" },
+  { label: "Amsterdam to Frankfurt",             from: "Amsterdam, Netherlands",        to: "Frankfurt, Germany",                   region: "europe" },
+  { label: "Ring Road Reykjavik to Akureyri",    from: "Reykjavík, Iceland",            to: "Akureyri, Iceland",                    region: "europe" },
+  { label: "NC500 Inverness to John o Groats",   from: "Inverness, Scotland",           to: "John o' Groats, Scotland",             region: "europe" },
+  // ── Australia ─────────────────────────────────────────────────────────────────
+  { label: "Sydney to Brisbane",                 from: "Sydney, NSW, Australia",        to: "Brisbane, QLD, Australia",             region: "australia" },
+  { label: "Melbourne to Sydney",                from: "Melbourne, VIC, Australia",     to: "Sydney, NSW, Australia",               region: "australia" },
+  { label: "Great Ocean Road",                   from: "Torquay, VIC, Australia",       to: "Allansford, VIC, Australia",           region: "australia" },
+  { label: "Sydney to Melbourne Inland",         from: "Sydney, NSW, Australia",        to: "Melbourne, VIC, Australia",            region: "australia" },
+  { label: "Brisbane to Cairns",                 from: "Brisbane, QLD, Australia",      to: "Cairns, QLD, Australia",               region: "australia" },
+  // ── Southern Africa ───────────────────────────────────────────────────────────
+  { label: "Cape Town to Port Elizabeth",        from: "Cape Town, South Africa",       to: "Gqeberha, South Africa",               region: "southern_africa" },
+  { label: "Johannesburg to Cape Town",          from: "Johannesburg, South Africa",    to: "Cape Town, South Africa",              region: "southern_africa" },
+  { label: "Johannesburg to Kruger",             from: "Johannesburg, South Africa",    to: "Kruger National Park, South Africa",   region: "southern_africa" },
+  { label: "Windhoek to Swakopmund",             from: "Windhoek, Namibia",             to: "Swakopmund, Namibia",                  region: "southern_africa" },
+  { label: "Kasane to Victoria Falls",           from: "Kasane, Botswana",              to: "Victoria Falls, Zimbabwe",             region: "southern_africa" },
+  // ── East Asia ─────────────────────────────────────────────────────────────────
+  { label: "Tokyo to Osaka",                     from: "Tokyo, Japan",                  to: "Osaka, Japan",                         region: "east_asia" },
+  { label: "Seoul to Busan",                     from: "Seoul, South Korea",            to: "Busan, South Korea",                   region: "east_asia" },
+  { label: "Jeju Coastal Road",                  from: "Jeju City, South Korea",        to: "Seogwipo, South Korea",                region: "east_asia" },
+  { label: "Taipei to Kenting",                  from: "Taipei, Taiwan",                to: "Kenting, Taiwan",                      region: "east_asia" },
+  { label: "Onomichi to Imabari Shimanami Kaido",from: "Onomichi, Japan",              to: "Imabari, Japan",                       region: "east_asia" },
+  // ── New Zealand ───────────────────────────────────────────────────────────────
+  { label: "Auckland to Wellington",             from: "Auckland, New Zealand",         to: "Wellington, New Zealand",              region: "other" },
+  { label: "Milford Road Te Anau to Milford Sound",from: "Te Anau, New Zealand",        to: "Milford Sound, New Zealand",           region: "other" },
+  { label: "Queenstown to Franz Josef",          from: "Queenstown, New Zealand",       to: "Franz Josef, New Zealand",             region: "other" },
+  { label: "Christchurch to Picton",             from: "Christchurch, New Zealand",     to: "Picton, New Zealand",                  region: "other" },
+  { label: "Thermal Explorer Auckland to Rotorua",from: "Auckland, New Zealand",        to: "Rotorua, New Zealand",                 region: "other" },
+  // ── Central America ───────────────────────────────────────────────────────────
+  { label: "San Jose to Guanacaste",             from: "San Jose, Costa Rica",          to: "Liberia, Costa Rica",                  region: "other" },
+  { label: "San Jose to Manuel Antonio",         from: "San Jose, Costa Rica",          to: "Manuel Antonio, Costa Rica",           region: "other" },
+  { label: "San Jose to Arenal Volcano",         from: "San Jose, Costa Rica",          to: "La Fortuna, Costa Rica",               region: "other" },
+  // ── South America ─────────────────────────────────────────────────────────────
+  { label: "El Calafate to El Chalten",          from: "El Calafate, Argentina",        to: "El Chaltén, Argentina",                region: "other" },
+  { label: "Santiago to Valparaiso",             from: "Santiago, Chile",               to: "Valparaíso, Chile",                    region: "other" },
+  { label: "Carretera Austral Chaiten to Coyhaique",from: "Chaitén, Chile",            to: "Coyhaique, Chile",                     region: "other" },
+  { label: "Sacred Valley Cusco to Ollantaytambo",from: "Cusco, Peru",                 to: "Ollantaytambo, Peru",                  region: "other" },
+  { label: "Rio to Sao Paulo",                   from: "Rio de Janeiro, Brazil",        to: "São Paulo, Brazil",                    region: "other" },
+  // ── Middle East ───────────────────────────────────────────────────────────────
+  { label: "Antalya to Fethiye",                 from: "Antalya, Turkey",               to: "Fethiye, Turkey",                      region: "other" },
+  { label: "Muscat to Nizwa",                    from: "Muscat, Oman",                  to: "Nizwa, Oman",                          region: "other" },
+  // ── Legacy Pittsboro routes ───────────────────────────────────────────────────
+  { label: "Pittsboro to Charleston",            from: "Pittsboro, NC",                 to: "Charleston, SC",                       region: "north_america" },
+  { label: "Pittsboro to Richmond",              from: "Pittsboro, NC",                 to: "Richmond, VA",                         region: "north_america" },
 ];
 
 // ================================================================
@@ -165,6 +185,7 @@ const SEARCH_TYPES = [
   "tourist_attraction", "amusement_park", "zoo", "aquarium",
   "observation_deck", "stadium",
   "train_station", "ferry_terminal",
+  "cemetery", "city_hall", "fire_station", "library", "park",
   // Generic roadside types — aggregated if 3+ per 30-mile stretch
   "church", "hindu_temple", "mosque", "synagogue", "airport",
 ];
@@ -201,6 +222,11 @@ const TYPE_TO_CATEGORY = {
   hindu_temple:             "culture",
   mosque:                   "culture",
   synagogue:                "history",
+  cemetery:                 "history",
+  city_hall:                "history",
+  fire_station:             "infrastructure",
+  library:                  "culture",
+  park:                     "nature",
 };
 
 const JUNK_TYPES = new Set([

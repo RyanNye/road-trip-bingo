@@ -8,7 +8,7 @@ const TARGET_ITEMS    = 32;
 const DB_SHARE        = 0.70; // ~70% drawn from crawled DB pool
 const AI_SHARE        = 0.20; // ~20% Claude generates fresh from regional knowledge
 const WILDCARD_SHARE  = 0.10; // ~10% wildcards
-const LEG_RADIUS_KM   = 2.01; // 1.25 miles — max distance from leg polyline to count an item
+const LEG_RADIUS_KM   = 1.2;  // 0.75 miles — max distance from leg polyline to count an item
 
 const WILDCARD_POOL = [
   { name: "Out-of-state license plate",   emoji: "🚗", desc: "Spot a car with a license plate from a different state.", category: "weird_fun" },
