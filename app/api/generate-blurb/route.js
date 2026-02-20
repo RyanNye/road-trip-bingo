@@ -4,6 +4,7 @@ import {
   GENERATE_BLURB_SYSTEM, generateBlurbUserPrompt,
   GENERATE_LEG_BLURB_SYSTEM, generateLegBlurbUserPrompt,
 } from "../../../lib/prompts.js";
+import { findRouteId, getRouteItemsForBlurb } from "../../../lib/db.js";
 import { supabaseAdmin } from "../../../lib/supabase.js";
 
 // Normalize a city string into a stable cache key segment
@@ -35,10 +36,20 @@ export async function POST(request) {
       return NextResponse.json({ blurbs: cached.blurbs, _cached: true });
     }
 
+    // ── Fetch nearby items for grounding ───────────────────────
+    let blurbItems = [];
+    try {
+      const routeId = await findRouteId(from, to);
+      if (routeId) blurbItems = await getRouteItemsForBlurb(routeId);
+    } catch (e) {
+      // Non-fatal — proceed without items if lookup fails
+    }
+
     // ── Generate ───────────────────────────────────────────────
-    const [systemPrompt, userPrompt] = leg_mode
-      ? [GENERATE_LEG_BLURB_SYSTEM, generateLegBlurbUserPrompt({ from, to })]
-      : [GENERATE_BLURB_SYSTEM, generateBlurbUserPrompt({ route_name, route_summary, major_waypoints, from, to })];
+    const systemPrompt = GENERATE_LEG_BLURB_SYSTEM;
+    const userPrompt   = leg_mode
+      ? generateLegBlurbUserPrompt({ from, to, items: blurbItems })
+      : generateBlurbUserPrompt({ route_name, route_summary, major_waypoints, from, to, items: blurbItems });
 
     const result = await askClaude(systemPrompt, userPrompt);
 

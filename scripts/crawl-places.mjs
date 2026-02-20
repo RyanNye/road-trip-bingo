@@ -32,13 +32,24 @@ try {
   }
 } catch { /* rely on environment */ }
 
-const { createClient } = await import("@supabase/supabase-js");
-const { haversine }    = await import("../lib/geo.js");
+// Parse --dry-run early so we can skip Supabase init when not needed
+const _earlyArgs = process.argv.slice(2);
+const _isDryRun  = _earlyArgs.includes("--dry-run");
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+const { haversine } = await import("../lib/geo.js");
+
+let supabase = null;
+if (!_isDryRun) {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY (not needed for --dry-run)");
+    process.exit(1);
+  }
+  const { createClient } = await import("@supabase/supabase-js");
+  supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
+}
 
 const MAPS_KEY = process.env.GOOGLE_MAPS_KEY;
 if (!MAPS_KEY) { console.error("Missing GOOGLE_MAPS_KEY"); process.exit(1); }
@@ -47,10 +58,14 @@ if (!MAPS_KEY) { console.error("Missing GOOGLE_MAPS_KEY"); process.exit(1); }
 // CONFIG
 // ================================================================
 
-const DAILY_LIMIT        = 200;   // Places API calls per day (fits $200 GCP free tier)
-const SAMPLE_INTERVAL_KM = 30;    // km between polyline sample points
-const SEARCH_RADIUS_M    = 25000; // 25 km radius per Places search
-const MIN_RATING         = 3.5;   // filter out low-rated places
+const DAILY_LIMIT           = 200;  // Places API calls per day (fits $200 GCP free tier)
+const SAMPLE_INTERVAL_KM    = 30;   // km between polyline sample points
+const SEARCH_RADIUS_M       = 25000; // 25 km radius per Places search
+const MIN_RATING            = 3.5;  // filter out low-rated places
+const VISIBLE_DIST_KM      = 2.01; // 1.25 miles — bingo-eligible, visible_from_highway = true
+const TRIVIA_DIST_KM       = 16.1; // 10 miles — stored for trivia/blurbs, visible_from_highway = false
+const GENERIC_CLUSTER_MIN  = 3;    // 3+ of same type in one window → aggregate
+const GENERIC_CLUSTER_KM   = 48;   // 30-mile window for clustering
 
 const REGIONAL_BUDGET = {
   north_america:   0.73,
@@ -80,6 +95,8 @@ const ROUTES = [
   { label: "I-70 Baltimore to Cove Fort",      from: "Baltimore, MD",                   to: "Cove Fort, UT",                         region: "north_america" },
   { label: "I-81 Dandridge to Watertown",      from: "Dandridge, TN",                   to: "Watertown, NY",                         region: "north_america" },
   { label: "I-26 Kingsport to Charleston",     from: "Kingsport, TN",                   to: "Charleston, SC",                        region: "north_america" },
+  { label: "Pittsboro to Charleston",          from: "Pittsboro, NC",                   to: "Charleston, SC",                        region: "north_america" },
+  { label: "Pittsboro to Richmond",            from: "Pittsboro, NC",                   to: "Richmond, VA",                          region: "north_america" },
   { label: "I-15 Sweet Grass to San Diego",    from: "Sweet Grass, MT",                 to: "San Diego, CA",                         region: "north_america" },
   { label: "I-55 Chicago to La Place",         from: "Chicago, IL",                     to: "La Place, LA",                          region: "north_america" },
   { label: "I-20 Florence to Kent",            from: "Florence, SC",                    to: "Kent, TX",                              region: "north_america" },
@@ -140,6 +157,7 @@ const ROUTES = [
 // Types passed to includedTypes in searchNearby.
 // Uses only types confirmed in the Places API (New) type table.
 const SEARCH_TYPES = [
+  // Landmark types — kept as individual "listed" items
   "national_park", "campground", "hiking_area", "beach",
   "wildlife_refuge", "botanical_garden",
   "historical_landmark", "museum", "art_gallery",
@@ -147,6 +165,8 @@ const SEARCH_TYPES = [
   "tourist_attraction", "amusement_park", "zoo", "aquarium",
   "observation_deck", "stadium",
   "train_station", "ferry_terminal",
+  // Generic roadside types — aggregated if 3+ per 30-mile stretch
+  "church", "hindu_temple", "mosque", "synagogue", "airport",
 ];
 
 const TYPE_TO_CATEGORY = {
@@ -176,6 +196,11 @@ const TYPE_TO_CATEGORY = {
   zoo:                      "weird_fun",
   aquarium:                 "weird_fun",
   observation_deck:         "weird_fun",
+  airport:                  "infrastructure",
+  church:                   "history",
+  hindu_temple:             "culture",
+  mosque:                   "culture",
+  synagogue:                "history",
 };
 
 const JUNK_TYPES = new Set([
@@ -323,6 +348,176 @@ function isJunk(types) {
   return (types || []).some((t) => JUNK_TYPES.has(t));
 }
 
+// ================================================================
+// DISTANCE + AGGREGATION + AI HELPERS
+// ================================================================
+
+// Types that get aggregated into a single generic item when clustered
+const AGGREGATE_TYPE_NAMES = {
+  church:       "Church",
+  hindu_temple: "Hindu Temple",
+  mosque:       "Mosque",
+  synagogue:    "Synagogue",
+  airport:      "Regional Airport",
+};
+
+// Project point P onto segment AB, return closest point on segment
+function projectOnSegment(plat, plng, alat, alng, blat, blng) {
+  const dx = blng - alng, dy = blat - alat;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return { lat: alat, lng: alng };
+  const t = Math.max(0, Math.min(1, ((plng - alng) * dx + (plat - alat) * dy) / lenSq));
+  return { lat: alat + t * dy, lng: alng + t * dx };
+}
+
+// Minimum haversine distance (km) from point to any segment of polyline
+function minDistToPolylineKm(lat, lng, coords) {
+  let min = Infinity;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const p = projectOnSegment(lat, lng, coords[i].lat, coords[i].lng, coords[i + 1].lat, coords[i + 1].lng);
+    const d = haversine(lat, lng, p.lat, p.lng);
+    if (d < min) min = d;
+  }
+  return min;
+}
+
+// Build cumulative km array along polyline
+function buildCumKm(coords) {
+  const cum = [0];
+  for (let i = 0; i < coords.length - 1; i++) {
+    cum.push(cum[i] + haversine(coords[i].lat, coords[i].lng, coords[i + 1].lat, coords[i + 1].lng));
+  }
+  return cum;
+}
+
+// Approximate km from route start to where this point projects onto the polyline
+function routePositionKm(lat, lng, coords, cumKm) {
+  let min = Infinity, pos = 0;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const dx = coords[i + 1].lng - coords[i].lng;
+    const dy = coords[i + 1].lat - coords[i].lat;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq > 0 ? Math.max(0, Math.min(1, ((lng - coords[i].lng) * dx + (lat - coords[i].lat) * dy) / lenSq)) : 0;
+    const proj = { lat: coords[i].lat + t * dy, lng: coords[i].lng + t * dx };
+    const d = haversine(lat, lng, proj.lat, proj.lng);
+    if (d < min) {
+      min = d;
+      const segLen = haversine(coords[i].lat, coords[i].lng, coords[i + 1].lat, coords[i + 1].lng);
+      pos = cumKm[i] + t * segLen;
+    }
+  }
+  return pos;
+}
+
+// Split places into individual landmarks vs. aggregated generic items.
+// Any type in AGGREGATE_TYPE_NAMES with 3+ occurrences in a 30-mile window
+// becomes a single generic item instead of individual entries.
+function aggregateGenerics(goodPlaces, coords, cumKm) {
+  const AGGREGATE_TYPES = new Set(Object.keys(AGGREGATE_TYPE_NAMES));
+  const landmarks = [];
+  const byType = {};
+
+  for (const { place, visible } of goodPlaces) {
+    const pt = place.primaryType;
+    if (pt && AGGREGATE_TYPES.has(pt)) {
+      const lat = place.location?.latitude;
+      const lng = place.location?.longitude;
+      const posKm = (lat != null && lng != null) ? routePositionKm(lat, lng, coords, cumKm) : 0;
+      (byType[pt] = byType[pt] || []).push({ place, posKm, visible });
+    } else {
+      landmarks.push({ place, visible });
+    }
+  }
+
+  const genericItems = [];
+  for (const [type, candidates] of Object.entries(byType)) {
+    candidates.sort((a, b) => a.posKm - b.posKm);
+    let i = 0;
+    while (i < candidates.length) {
+      let j = i;
+      while (j < candidates.length && candidates[j].posKm - candidates[i].posKm <= GENERIC_CLUSTER_KM) j++;
+      if (j - i >= GENERIC_CLUSTER_MIN) {
+        genericItems.push({ name: AGGREGATE_TYPE_NAMES[type], category: TYPE_TO_CATEGORY[type] || "weird_fun" });
+        i = j;
+      } else {
+        for (let k = i; k < j; k++) landmarks.push({ place: candidates[k].place, visible: candidates[k].visible });
+        i = j;
+      }
+    }
+  }
+  return { landmarks, genericItems };
+}
+
+// Wildcard items — fun things to spot on any highway trip
+const WILDCARD_POOL = [
+  { name: "Out-of-state license plate",   description: "Spot a car with a license plate from a different state." },
+  { name: "Car pulling a boat",           description: "A vehicle towing a boat on a trailer." },
+  { name: "Oversized load truck",         description: "A truck carrying an oversized or wide load, often with escort vehicles." },
+  { name: "RV with bikes on the back",    description: "A motorhome or camper with bicycles mounted on the rear rack." },
+  { name: "Classic car (pre-1980)",       description: "A vintage automobile from 1980 or earlier on the open road." },
+  { name: "Horse trailer",               description: "A trailer for horses, usually hitched to a pickup truck." },
+  { name: "Motorcycle group (5+ riders)", description: "Five or more motorcycles riding together in formation." },
+  { name: "Car with a kayak on top",      description: "A vehicle with a kayak or canoe strapped to the roof rack." },
+  { name: "Convertible with top down",    description: "A convertible car cruising with the roof retracted." },
+  { name: "Dog with head out the window", description: "A very happy dog enjoying the wind from a car window." },
+  { name: "Double-decker car hauler",     description: "An auto-transport truck carrying cars stacked on two levels." },
+  { name: "Police traffic stop",          description: "A police vehicle with lights on, pulled over on the shoulder." },
+  { name: "Road construction crew",       description: "Workers actively doing road construction or maintenance." },
+  { name: "Farm tractor on the road",     description: "A farm tractor driving on or crossing the highway." },
+  { name: "Car with a Christmas tree",    description: "A vehicle with a Christmas tree strapped to the roof or sticking out of the trunk." },
+];
+
+function pickWildcards(count) {
+  return [...WILDCARD_POOL].sort(() => Math.random() - 0.5).slice(0, count);
+}
+
+// Call Claude Haiku to generate a small pool of region-specific items for the DB.
+// The website's generate-items API handles the final 70/20/10 mix per card.
+async function generateAIItems(routeDef, existingCount) {
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) { console.warn(`    Skipping AI items — no ANTHROPIC_API_KEY`); return []; }
+
+  const needed = Math.max(8, 20 - Math.floor(existingCount * 0.1));
+  const prompt = `You are building a road trip bingo card for a drive from ${routeDef.from} to ${routeDef.to}.
+
+Generate exactly ${needed} bingo card items that passengers can see from inside the car WITHOUT exiting. Every item must:
+- Be visible from the highway window, within 1 mile of the road
+- Be realistic and common for this specific region and route
+- NOT be a specific named landmark (those come from another source)
+
+Focus on things passengers WILL see on this highway — the common roadside features that make bingo playable: water towers, grain silos, cell towers, church steeples, farm equipment, specific crop fields (corn, cotton, tobacco, soybeans), rest stop signs, weigh stations, regional wildlife (deer, hawks, vultures), terrain features (ridgelines, river crossings, valley views), billboard types, and truck types common to the region.
+
+Respond with a JSON array only, no explanation:
+[
+  { "name": "Short item name (2-5 words)", "category": "nature|history|culture|infrastructure|weird_fun", "description": "One sentence: what it is and why you'd see it on this route." }
+]`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:  "POST",
+      headers: {
+        "Content-Type":      "application/json",
+        "x-api-key":         key,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model:      "claude-haiku-4-5-20251001",
+        max_tokens: 3000,
+        messages:   [{ role: "user", content: prompt }],
+      }),
+    });
+    if (!res.ok) { console.warn(`    AI items API error: ${res.status}`); return []; }
+    const data  = await res.json();
+    const text  = data.content?.[0]?.text || "";
+    const match = text.match(/\[[\s\S]*\]/);
+    if (!match) { console.warn(`    AI items: could not parse JSON response`); return []; }
+    return JSON.parse(match[0]);
+  } catch (e) {
+    console.warn(`    AI items error: ${e.message}`);
+    return [];
+  }
+}
+
 // Build a template description for Option C (enrich with Claude later)
 function templateDescription(place, from, to) {
   if (place.editorialSummary?.text) return place.editorialSummary.text;
@@ -335,14 +530,38 @@ function templateDescription(place, from, to) {
 // ENSURE ROUTE + PROGRESS ROWS EXIST
 // ================================================================
 
-async function ensureRouteAndProgress(routeDef) {
+async function ensureRouteAndProgress(routeDef, dryRun = false) {
   const { from, to, label, region } = routeDef;
   const corridorId = makeCorridorId(from, to);
+
+  // In dry-run, skip DB entirely — just fetch the route from Directions API
+  if (dryRun) {
+    console.log(`    [DRY RUN] Fetching Directions for "${label}"...`);
+    const dir = await fetchDirectionsPolyline(from, to);
+    console.log(`    Route: ${dir.estimatedMiles} mi / ${dir.estimatedHours} h`);
+    return {
+      route: {
+        id: "dry-run",
+        polyline: JSON.stringify(dir.coords),
+        estimated_miles: dir.estimatedMiles,
+        estimated_hours: dir.estimatedHours,
+        region,
+      },
+      progress: {
+        id: "dry-run",
+        status: "queued",
+        sample_index: 0,
+        items_found: 0,
+        items_rejected: 0,
+        first_crawled_at: null,
+      },
+    };
+  }
 
   // Find or create routes row
   let { data: route } = await supabase
     .from("routes")
-    .select("id, polyline, estimated_miles, estimated_hours, region")
+    .select("id, polyline, total_km, estimated_hours, regions")
     .eq("corridor_id", corridorId)
     .single();
 
@@ -361,20 +580,23 @@ async function ensureRouteAndProgress(routeDef) {
         route_summary:   `${from} to ${to} via ${dir.routeName}`,
         highway_names:   [dir.routeName],
         polyline:        JSON.stringify(dir.coords),
-        estimated_miles: dir.estimatedMiles,
+        total_km:        parseFloat((dir.estimatedMiles * 1.60934).toFixed(1)),
         estimated_hours: dir.estimatedHours,
-        region,
+        regions:         [region],
         search_count:    0,
       })
-      .select("id, polyline, estimated_miles, estimated_hours, region")
+      .select("id, polyline, total_km, estimated_hours, regions")
       .single();
 
     if (error) throw new Error(`Failed to create route: ${error.message}`);
     route = newRoute;
     console.log(`    Created route: ${dir.estimatedMiles} mi / ${dir.estimatedHours} h`);
-  } else if (!route.region) {
-    await supabase.from("routes").update({ region }).eq("id", route.id);
+  } else if (!route.regions?.length) {
+    await supabase.from("routes").update({ regions: [region] }).eq("id", route.id);
   }
+
+  // Normalize total_km → estimated_miles for downstream use
+  if (route) route.estimated_miles = (route.total_km || 0) / 1.60934;
 
   // Find or create crawler_progress row
   let { data: progress } = await supabase
@@ -413,7 +635,7 @@ async function crawlRoute(routeDef, opts = {}) {
 
   console.log(`\n  [${label}]`);
 
-  const { route, progress } = await ensureRouteAndProgress(routeDef);
+  const { route, progress } = await ensureRouteAndProgress(routeDef, dryRun);
 
   if (progress.status === "complete") {
     console.log(`    Already complete — skipping`);
@@ -456,18 +678,20 @@ async function crawlRoute(routeDef, opts = {}) {
   }
 
   // Load existing place_ids for this route to avoid duplicates
-  const { data: existingItems } = await supabase
-    .from("route_items")
-    .select("google_place_id")
-    .eq("route_id", route.id)
-    .not("google_place_id", "is", null);
+  const seenIds = new Set();
+  if (!dryRun) {
+    const { data: existingItems } = await supabase
+      .from("route_items")
+      .select("google_place_id")
+      .eq("route_id", route.id)
+      .not("google_place_id", "is", null);
+    for (const i of existingItems || []) seenIds.add(i.google_place_id);
+  }
 
-  const seenIds = new Set((existingItems || []).map((i) => i.google_place_id));
-
-  let samplesUsed   = 0;
-  let itemsAdded    = 0;
-  let itemsRejected = 0;
-  let currentIndex  = startIndex;
+  // ── PHASE 1: Collect all raw places from Places API ────────────────────────
+  let samplesUsed  = 0;
+  let currentIndex = startIndex;
+  const rawPlaces  = []; // { place, samplePt }
 
   for (let i = startIndex; i < totalSamples; i++) {
     if (samplesRemaining <= 0) {
@@ -480,102 +704,144 @@ async function crawlRoute(routeDef, opts = {}) {
 
     let places = [];
     try {
-      if (!dryRun) {
-        places = await searchNearby(pt.lat, pt.lng);
-      }
+      if (!dryRun) places = await searchNearby(pt.lat, pt.lng);
       samplesUsed++;
       samplesRemaining--;
     } catch (e) {
       console.error(`\n    Places API error: ${e.message}`);
       if (!dryRun) {
         await supabase.from("crawler_progress").update({
-          status:        "error",
-          error_message: e.message,
-          updated_at:    new Date().toISOString(),
+          status: "error", error_message: e.message, updated_at: new Date().toISOString(),
         }).eq("id", progress.id);
       }
       break;
     }
 
-    // Filter and prepare items
-    const newItems = [];
+    let newRaw = 0;
     for (const place of places) {
-      const placeId = place.id;
-      if (!placeId || seenIds.has(placeId))         { itemsRejected++; continue; }
-      if (!place.displayName?.text)                  { itemsRejected++; continue; }
-      if (isJunk(place.types))                       { itemsRejected++; continue; }
-      if (place.rating != null && place.rating < MIN_RATING) { itemsRejected++; continue; }
-
-      seenIds.add(placeId);
-      newItems.push({
-        route_id:            route.id,
-        name:                place.displayName.text,
-        category:            classifyPlace(place.types),
-        tier:                "listed",
-        route_description:   templateDescription(place, from, to),
-        visible_from_highway: true,
-        source:              "google_places",
-        description_quality: place.editorialSummary?.text ? "editorial" : "template",
-        google_place_id:     placeId,
-        latitude:            place.location?.latitude  ?? null,
-        longitude:           place.location?.longitude ?? null,
-      });
+      if (!place.id || seenIds.has(place.id)) continue;
+      seenIds.add(place.id);
+      rawPlaces.push({ place, samplePt: pt });
+      newRaw++;
     }
-
-    if (newItems.length && !dryRun) {
-      const { error } = await supabase.from("route_items").insert(newItems);
-      if (error) console.warn(`\n    Insert error: ${error.message}`);
-      else itemsAdded += newItems.length;
-    } else {
-      itemsAdded += newItems.length; // dry-run count
-    }
-
-    console.log(`+${newItems.length} items`);
+    console.log(`${newRaw} raw`);
     currentIndex = i + 1;
 
-    // Update progress row after every sample point
     if (!dryRun) {
-      const crawledKm = parseFloat(
-        ((currentIndex / totalSamples) * (route.estimated_miles * 1.60934 || 0)).toFixed(1)
-      );
       await supabase.from("crawler_progress").update({
-        sample_index:      currentIndex,
-        crawled_km:        crawledKm,
-        items_found:       (progress.items_found || 0) + itemsAdded,
-        items_rejected:    (progress.items_rejected || 0) + itemsRejected,
-        last_lat:          pt.lat,
-        last_lng:          pt.lng,
-        last_crawled_at:   new Date().toISOString(),
-        first_crawled_at:  progress.first_crawled_at || new Date().toISOString(),
-        updated_at:        new Date().toISOString(),
+        sample_index:     currentIndex,
+        last_lat:         pt.lat,
+        last_lng:         pt.lng,
+        last_crawled_at:  new Date().toISOString(),
+        first_crawled_at: progress.first_crawled_at || new Date().toISOString(),
+        updated_at:       new Date().toISOString(),
       }).eq("id", progress.id);
     }
 
-    await sleep(200); // pace requests; well under rate limits
+    await sleep(200);
   }
 
-  // Set final status
+  // ── PHASE 2: Distance filter — two tiers ──────────────────────────────────
+  // Tier A (≤ 2 mi): bingo-eligible, visible_from_highway = true
+  // Tier B (2–10 mi): stored for trivia/blurbs, visible_from_highway = false
+  // Beyond 10 mi: rejected entirely
+  const cumKm = buildCumKm(coords);
+  let distRejected = 0;
+  const nearPlaces = [];
+  for (const { place, samplePt } of rawPlaces) {
+    const lat = place.location?.latitude;
+    const lng = place.location?.longitude;
+    if (lat == null || lng == null) { distRejected++; continue; }
+    const distKm = minDistToPolylineKm(lat, lng, coords);
+    if (distKm > TRIVIA_DIST_KM) { distRejected++; continue; }
+    nearPlaces.push({ place, samplePt, visible: distKm <= VISIBLE_DIST_KM });
+  }
+  const visibleCount = nearPlaces.filter((p) => p.visible).length;
+  console.log(`    Distance filter: ${rawPlaces.length} → ${nearPlaces.length} kept (${distRejected} beyond 10 mi), ${visibleCount} bingo-visible, ${nearPlaces.length - visibleCount} trivia-only`);
+
+  // ── PHASE 3: Quality filter ────────────────────────────────────────────────
+  let qualRejected = 0;
+  const goodPlaces = nearPlaces.filter(({ place }) => {
+    if (!place.displayName?.text)                           { qualRejected++; return false; }
+    if (isJunk(place.types))                                { qualRejected++; return false; }
+    if (place.rating != null && place.rating < MIN_RATING) { qualRejected++; return false; }
+    return true;
+  });
+  console.log(`    Quality filter: ${nearPlaces.length} → ${goodPlaces.length} (${qualRejected} junk/low-rated)`);
+
+  // ── PHASE 4: Aggregate generics ───────────────────────────────────────────
+  const { landmarks, genericItems: aggregatedGenerics } = aggregateGenerics(goodPlaces, coords, cumKm);
+  console.log(`    Landmarks: ${landmarks.length}, Generics aggregated: ${aggregatedGenerics.length}`);
+
+  // ── PHASE 5: Build DB rows and insert ────────────────────────────────────
+  // AI items and wildcards are generated at card-generation time (generate-items API),
+  // not during the crawl — so Claude tokens are never spent here.
+  const landmarkRows = landmarks.map(({ place, visible }) => ({
+    route_id:             route.id,
+    name:                 place.displayName.text,
+    category:             classifyPlace(place.types),
+    tier:                 "listed",
+    route_description:    templateDescription(place, from, to),
+    visible_from_highway: visible ?? true,
+    source:               "crawler",
+    description_quality:  place.editorialSummary?.text ? "editorial" : "template",
+    google_place_id:      place.id,
+    latitude:             place.location?.latitude  ?? null,
+    longitude:            place.location?.longitude ?? null,
+  }));
+
+  const genericRows = aggregatedGenerics.map((g) => ({
+    route_id:             route.id,
+    name:                 g.name,
+    category:             g.category,
+    tier:                 "generic",
+    route_description:    `${g.name}s are a common sight along this route.`,
+    visible_from_highway: true,
+    source:               "crawler",
+    description_quality:  "template",
+    google_place_id:      null,
+    latitude:             null,
+    longitude:            null,
+  }));
+
+  const allRows   = [...landmarkRows, ...genericRows];
+  let itemsAdded  = 0;
+  const itemsRejected = distRejected + qualRejected;
+
+  if (allRows.length > 0 && !dryRun) {
+    const { error } = await supabase.from("route_items").insert(allRows);
+    if (error) console.warn(`    Insert error: ${error.message}`);
+    else itemsAdded = allRows.length;
+  } else if (dryRun) {
+    itemsAdded = allRows.length;
+  }
+
+  // ── Final progress update ─────────────────────────────────────────────────
   if (!dryRun) {
     const finalStatus = currentIndex >= totalSamples ? "complete" : "queued";
-    await supabase.from("crawler_progress")
-      .update({ status: finalStatus, updated_at: new Date().toISOString() })
-      .eq("id", progress.id);
+    const crawledKm   = parseFloat(((currentIndex / totalSamples) * (route.total_km || 0)).toFixed(1));
+    await supabase.from("crawler_progress").update({
+      status:         finalStatus,
+      crawled_km:     crawledKm,
+      items_found:    (progress.items_found    || 0) + itemsAdded,
+      items_rejected: (progress.items_rejected || 0) + itemsRejected,
+      updated_at:     new Date().toISOString(),
+    }).eq("id", progress.id);
     if (finalStatus === "complete") console.log(`    Route fully crawled!`);
   }
 
-  // Record in daily log
   if (!dryRun && samplesUsed > 0) {
     const { error } = await supabase.rpc("upsert_crawler_daily_log", {
       p_searches_used:  samplesUsed,
       p_items_added:    itemsAdded,
       p_items_rejected: itemsRejected,
-      p_api_cost_cents: samplesUsed * 3, // $0.032/call ~ 3 cents
+      p_api_cost_cents: samplesUsed * 3,
       p_region:         region,
     });
     if (error) console.warn(`    Daily log error: ${error.message}`);
   }
 
-  console.log(`    Summary: +${itemsAdded} items, ${samplesUsed} API calls, ${itemsRejected} rejected`);
+  console.log(`    Summary: +${itemsAdded} items (${landmarkRows.length} landmarks, ${genericRows.length} generics), ${samplesUsed} API calls, ${itemsRejected} rejected`);
   return { samplesUsed };
 }
 
@@ -605,16 +871,18 @@ async function main() {
     else console.log(`  Reprioritization complete`);
   }
 
-  // Check today's usage
-  const today = new Date().toISOString().slice(0, 10);
-  const { data: todayLog } = await supabase
-    .from("crawler_daily_log")
-    .select("searches_used")
-    .eq("log_date", today)
-    .single();
-
-  const usedToday = todayLog?.searches_used || 0;
-  let remaining   = dryRun ? 9999 : dailyLimit - usedToday;
+  // Check today's usage (skipped in dry-run)
+  let usedToday = 0;
+  if (!dryRun) {
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: todayLog } = await supabase
+      .from("crawler_daily_log")
+      .select("searches_used")
+      .eq("log_date", today)
+      .single();
+    usedToday = todayLog?.searches_used || 0;
+  }
+  let remaining = dryRun ? 9999 : dailyLimit - usedToday;
 
   console.log(`  Daily budget: ${usedToday} used / ${dailyLimit} limit (${remaining} remaining)\n`);
 
